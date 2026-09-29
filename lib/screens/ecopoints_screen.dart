@@ -7,6 +7,7 @@ import '../services/ewaste_service.dart';
 import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../widgets/app_card.dart';
+import '../widgets/cash_rewards.dart';
 
 class EcoPointsScreen extends StatelessWidget {
   const EcoPointsScreen({super.key});
@@ -22,6 +23,12 @@ class EcoPointsScreen extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
         children: [
           _BalanceCard(service: service),
+          const SectionHeader(
+            title: 'Cash rewards',
+            subtitle: 'Recycle a lot and get paid to Mobile Money',
+            padding: EdgeInsets.fromLTRB(4, 26, 4, 12),
+          ),
+          CashRewardsCard(service: service),
           const SectionHeader(
             title: 'Rewards',
             subtitle: 'Swap your points for something good',

@@ -7,6 +7,7 @@ import '../utils/constants.dart';
 import '../utils/format.dart';
 import '../widgets/app_card.dart';
 import '../widgets/app_logo.dart';
+import '../widgets/sync_status.dart';
 import 'ecopoints_screen.dart';
 import 'onboarding_screen.dart';
 import 'profile_setup_screen.dart';
@@ -17,6 +18,45 @@ class ProfileScreen extends StatelessWidget {
   void _openTab(BuildContext context, int tab) {
     context.read<ShellController>().goTo(tab);
     Navigator.of(context).popUntil((route) => route.isFirst);
+  }
+
+  Future<void> _editServer(BuildContext context, EwasteService service) async {
+    final controller = TextEditingController(text: service.serverUrl);
+    final url = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Server address'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Use the address printed by the EcoCollect server, e.g. http://192.168.1.10:8787. Leave empty to keep data on this device only.',
+              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: controller,
+              autofocus: true,
+              keyboardType: TextInputType.url,
+              decoration: const InputDecoration(hintText: 'http://…:8787'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (url != null) await service.setServerUrl(url);
   }
 
   Future<void> _reset(BuildContext context) async {
@@ -176,6 +216,77 @@ class ProfileScreen extends StatelessWidget {
                     title: profile.phone,
                     subtitle: 'Used by collectors for pickups',
                   ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          AppCard(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const IconBadge(
+                      icon: Icons.cloud_sync_rounded,
+                      color: AppColors.primary,
+                      size: 38,
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'Server connection',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    const SyncStatusChip(),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  service.syncEnabled
+                      ? service.serverUrl
+                      : 'Sync is off. Data stays on this device.',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                if (service.syncStatus == SyncStatus.offline &&
+                    service.syncError != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    service.syncError!,
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      color: AppColors.warning,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                        ),
+                        onPressed: () => _editServer(context, service),
+                        child: const Text('Change server'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: FilledButton(
+                        style: FilledButton.styleFrom(
+                          minimumSize: const Size(0, 44),
+                        ),
+                        onPressed: service.syncEnabled ? service.sync : null,
+                        child: const Text('Sync now'),
+                      ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

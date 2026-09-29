@@ -1,5 +1,8 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../services/ewaste_service.dart';
 import '../services/shell_controller.dart';
 import '../utils/constants.dart';
 import 'history_screen.dart';
@@ -16,9 +19,10 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   // Tabs are built the first time they are opened, then kept alive.
   final _visited = <int>{ShellController.home};
+  Timer? _syncTimer;
 
   static const _tabs = [
     HomeScreen(),
@@ -26,6 +30,33 @@ class _MainShellState extends State<MainShell> {
     HistoryScreen(),
     ImpactScreen(),
   ];
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final service = context.read<EwasteService>();
+    WidgetsBinding.instance.addPostFrameCallback((_) => service.sync());
+    // Picks up verifications and payouts made from the admin dashboard.
+    _syncTimer = Timer.periodic(
+      const Duration(seconds: 20),
+      (_) => service.sync(),
+    );
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      context.read<EwasteService>().sync();
+    }
+  }
+
+  @override
+  void dispose() {
+    _syncTimer?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {

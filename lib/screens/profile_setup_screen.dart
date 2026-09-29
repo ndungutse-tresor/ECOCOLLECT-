@@ -63,6 +63,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
 
     await service.completeOnboarding(
       UserProfile(
+        id: UserProfile.newId(),
         name: _nameController.text.trim(),
         phone: _phoneController.text.trim(),
         district: _district,

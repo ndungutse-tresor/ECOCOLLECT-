@@ -105,7 +105,11 @@ class RecentItemTile extends StatelessWidget {
                 Text(
                   item.isCredited
                       ? '+${item.ecoPoints} pts'
-                      : '${item.ecoPoints} pts pending',
+                      : item.isRejected
+                          ? 'No points'
+                          : item.awaitingVerification
+                              ? '${item.ecoPoints} pts · verifying'
+                              : '${item.ecoPoints} pts pending',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

@@ -43,6 +43,12 @@ class HomeScreen extends StatelessWidget {
                 onTap: () => shell.goTo(ShellController.history),
               ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.1),
             ),
+          if (service.claimableMilestones.isNotEmpty)
+            SliverToBoxAdapter(
+              child: _CashBanner(
+                amountRwf: service.claimableMilestones.first.amountRwf,
+              ).animate().fadeIn(duration: 350.ms).slideY(begin: 0.1),
+            ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 16, 16, 0),
@@ -449,12 +455,12 @@ class _PendingBanner extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  '$count report${count == 1 ? '' : 's'} awaiting hand-over',
+                  '$count report${count == 1 ? '' : 's'} in progress',
                   style: const TextStyle(fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '+$points EcoPoints once you hand ${count == 1 ? 'it' : 'them'} over',
+                  '+$points EcoPoints once verified',
                   style: const TextStyle(
                     fontSize: 12.5,
                     color: Color(0xFF92400E),
@@ -646,6 +652,62 @@ class _TipCard extends StatelessWidget {
               ],
             ),
           ),
+        ],
+      ),
+    );
+  }
+}
+
+class _CashBanner extends StatelessWidget {
+  final int amountRwf;
+
+  const _CashBanner({required this.amountRwf});
+
+  @override
+  Widget build(BuildContext context) {
+    return AppCard(
+      margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
+      gradient: const LinearGradient(
+        colors: [Color(0xFF0B6B50), Color(0xFF15965F)],
+      ),
+      shadow: AppShadows.card,
+      padding: const EdgeInsets.all(14),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(builder: (_) => const EcoPointsScreen()),
+      ),
+      child: Row(
+        children: [
+          IconBadge(
+            icon: Icons.payments_rounded,
+            color: AppColors.accentLight,
+            background: Colors.white.withValues(alpha: 0.15),
+            size: 42,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '${formatRwf(amountRwf)} cash reward unlocked!',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Claim it to your Mobile Money account',
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    color: Colors.white.withValues(alpha: 0.85),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: Colors.white),
         ],
       ),
     );

@@ -83,9 +83,30 @@ class ItemDetailSheet extends StatelessWidget {
                 StatusChip(status: item.status),
               ],
             ),
-            if (item.photoPath != null) ...[
+            if (item.isRejected) ...[
+              const SizedBox(height: 16),
+              _NoticeBanner(
+                icon: Icons.block_rounded,
+                color: const Color(0xFFB42318),
+                background: AppColors.errorSoft,
+                title: 'This report was not accepted',
+                message: item.adminNote?.isNotEmpty == true
+                    ? item.adminNote!
+                    : 'Contact EcoCollect if you think this is a mistake.',
+              ),
+            ] else if (item.adminNote?.isNotEmpty == true) ...[
+              const SizedBox(height: 16),
+              _NoticeBanner(
+                icon: Icons.chat_bubble_outline_rounded,
+                color: AppColors.sky,
+                background: AppColors.skySoft,
+                title: 'Note from EcoCollect',
+                message: item.adminNote!,
+              ),
+            ],
+            if (service.photoFor(item) != null) ...[
               const SizedBox(height: 18),
-              PhotoView(path: item.photoPath!, height: 190),
+              PhotoView(path: service.photoFor(item)!, height: 190),
             ],
             const SizedBox(height: 18),
             _Section(
@@ -112,7 +133,18 @@ class ItemDetailSheet extends StatelessWidget {
             _Timeline(item: item),
             const SizedBox(height: 16),
             _PointsBanner(item: item),
-            if (item.isPending) ...[
+            if (item.awaitingVerification) ...[
+              const SizedBox(height: 16),
+              const _NoticeBanner(
+                icon: Icons.hourglass_top_rounded,
+                color: AppColors.warning,
+                background: AppColors.warningSoft,
+                title: 'Waiting for verification',
+                message:
+                    'The EcoCollect team will confirm your hand-over and credit your points.',
+              ),
+            ],
+            if (item.isPending && !item.awaitingVerification) ...[
               const SizedBox(height: 20),
               FilledButton.icon(
                 onPressed: () => _confirmHandOver(context, item),
@@ -139,12 +171,13 @@ class ItemDetailSheet extends StatelessWidget {
   Future<void> _confirmHandOver(BuildContext context, EwasteItem item) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    final points = await context.read<EwasteService>().confirmHandOver(item.id);
+    await context.read<EwasteService>().confirmHandOver(item.id);
     navigator.pop();
     messenger.showSnackBar(
       SnackBar(
-        content:
-            Text('Thank you! +$points EcoPoints credited to your balance.'),
+        content: Text(
+          'Thank you! +${item.ecoPoints} EcoPoints will be credited once EcoCollect verifies the hand-over.',
+        ),
         backgroundColor: AppColors.primary,
       ),
     );
@@ -321,6 +354,7 @@ class _Timeline extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dropoff = item.disposalMethod == DisposalMethod.dropoff;
+    final handedOverAt = item.userConfirmedAt ?? item.collectedAt;
     final steps = [
       (
         'Reported',
@@ -329,11 +363,20 @@ class _Timeline extends StatelessWidget {
       ),
       (
         dropoff ? 'Dropped off' : 'Picked up',
-        item.collectedAt != null
-            ? formatDateTime(item.collectedAt!)
+        handedOverAt != null
+            ? formatDateTime(handedOverAt)
             : dropoff
                 ? 'Waiting for you to drop it off'
                 : 'A collector will call you to confirm',
+        handedOverAt != null,
+      ),
+      (
+        'Verified · points credited',
+        item.collectedAt != null
+            ? formatDateTime(item.collectedAt!)
+            : item.isRejected
+                ? 'Not accepted'
+                : 'EcoCollect confirms the hand-over',
         item.collectedAt != null,
       ),
       (
@@ -451,12 +494,62 @@ class _PointsBanner extends StatelessWidget {
             child: Text(
               credited
                   ? '+${item.ecoPoints} EcoPoints credited'
-                  : '+${item.ecoPoints} EcoPoints once handed over',
+                  : item.isRejected
+                      ? 'No EcoPoints for this report'
+                      : '+${item.ecoPoints} EcoPoints once verified',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 color:
                     credited ? AppColors.accentDark : AppColors.textSecondary,
               ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _NoticeBanner extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final Color background;
+  final String title;
+  final String message;
+
+  const _NoticeBanner({
+    required this.icon,
+    required this.color,
+    required this.background,
+    required this.title,
+    required this.message,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: background,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title,
+                    style: const TextStyle(fontWeight: FontWeight.w800)),
+                const SizedBox(height: 2),
+                Text(
+                  message,
+                  style: const TextStyle(fontSize: 13, height: 1.4),
+                ),
+              ],
             ),
           ),
         ],

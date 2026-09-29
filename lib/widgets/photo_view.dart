@@ -3,7 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../utils/constants.dart';
 
-/// Shows a report photo from a local file (mobile) or blob URL (web).
+/// Shows a report photo from a local file, a web blob URL or the server.
 class PhotoView extends StatelessWidget {
   final String path;
   final double? width;
@@ -33,7 +33,8 @@ class PhotoView extends StatelessWidget {
       );
     }
 
-    final image = kIsWeb
+    final isUrl = kIsWeb || path.startsWith('http');
+    final image = isUrl
         ? Image.network(
             path,
             width: width,

@@ -18,6 +18,9 @@ String trimDecimals(double value, int decimals) {
 
 String formatNumber(num value) => NumberFormat.decimalPattern().format(value);
 
+/// Rwandan francs, e.g. "RWF 3,000".
+String formatRwf(num amount) => 'RWF ${formatNumber(amount)}';
+
 String formatDistance(double meters) {
   if (meters < 1000) return '${meters.round()} m';
   return '${(meters / 1000).toStringAsFixed(meters < 10000 ? 1 : 0)} km';

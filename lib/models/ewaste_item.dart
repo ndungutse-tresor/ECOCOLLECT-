@@ -106,7 +106,7 @@ class EwasteCategory {
       );
 }
 
-enum ItemStatus { pending, collected, recycled }
+enum ItemStatus { pending, collected, recycled, rejected }
 
 extension ItemStatusX on ItemStatus {
   String get label {
@@ -117,6 +117,8 @@ extension ItemStatusX on ItemStatus {
         return 'Collected';
       case ItemStatus.recycled:
         return 'Recycled';
+      case ItemStatus.rejected:
+        return 'Rejected';
     }
   }
 }
@@ -185,10 +187,22 @@ class EwasteItem {
   final PickupDetails? pickup;
   final DateTime createdAt;
   final ItemStatus status;
+
+  /// When the member said they handed the item over (awaiting verification).
+  final DateTime? userConfirmedAt;
   final DateTime? collectedAt;
   final DateTime? recycledAt;
 
-  /// Points this report is worth. They are credited once the item is handed over.
+  /// Server path of the uploaded photo, e.g. /photos/abc.jpg.
+  final String? photoUrl;
+
+  /// Message from the EcoCollect team, e.g. why a report was rejected.
+  final String? adminNote;
+
+  /// Whether the latest local changes have reached the server.
+  final bool synced;
+
+  /// Points this report is worth. They are credited once it is verified.
   final int ecoPoints;
 
   EwasteItem({
@@ -204,8 +218,12 @@ class EwasteItem {
     this.pickup,
     required this.createdAt,
     this.status = ItemStatus.pending,
+    this.userConfirmedAt,
     this.collectedAt,
     this.recycledAt,
+    this.photoUrl,
+    this.adminNote,
+    this.synced = false,
     int? ecoPoints,
   }) : ecoPoints = ecoPoints ?? pointsFor(estimatedWeightKg, quantity);
 
@@ -216,12 +234,19 @@ class EwasteItem {
   EwasteCategory get category => EwasteCategory.byId(categoryId);
   String get categoryName => category.name;
   bool get isPending => status == ItemStatus.pending;
-  bool get isCredited => status != ItemStatus.pending;
+  bool get isRejected => status == ItemStatus.rejected;
+  bool get isCredited =>
+      status == ItemStatus.collected || status == ItemStatus.recycled;
+  bool get awaitingVerification => isPending && userConfirmedAt != null;
 
   EwasteItem copyWith({
     ItemStatus? status,
+    DateTime? userConfirmedAt,
     DateTime? collectedAt,
     DateTime? recycledAt,
+    String? photoPath,
+    String? photoUrl,
+    bool? synced,
   }) {
     return EwasteItem(
       id: id,
@@ -229,15 +254,19 @@ class EwasteItem {
       quantity: quantity,
       estimatedWeightKg: estimatedWeightKg,
       condition: condition,
-      photoPath: photoPath,
+      photoPath: photoPath ?? this.photoPath,
       description: description,
       disposalMethod: disposalMethod,
       dropoffPointId: dropoffPointId,
       pickup: pickup,
       createdAt: createdAt,
       status: status ?? this.status,
+      userConfirmedAt: userConfirmedAt ?? this.userConfirmedAt,
       collectedAt: collectedAt ?? this.collectedAt,
       recycledAt: recycledAt ?? this.recycledAt,
+      photoUrl: photoUrl ?? this.photoUrl,
+      adminNote: adminNote,
+      synced: synced ?? this.synced,
       ecoPoints: ecoPoints,
     );
   }
@@ -255,8 +284,12 @@ class EwasteItem {
         'pickup': pickup?.toJson(),
         'createdAt': createdAt.toIso8601String(),
         'status': status.name,
+        'userConfirmedAt': userConfirmedAt?.toIso8601String(),
         'collectedAt': collectedAt?.toIso8601String(),
         'recycledAt': recycledAt?.toIso8601String(),
+        'photoUrl': photoUrl,
+        'adminNote': adminNote,
+        'synced': synced,
         'ecoPoints': ecoPoints,
       };
 
@@ -283,9 +316,13 @@ class EwasteItem {
       createdAt: DateTime.parse(json['createdAt'] as String),
       status:
           ItemStatus.values.asNameMap()[json['status']] ?? ItemStatus.pending,
+      userConfirmedAt: date('userConfirmedAt'),
       collectedAt: date('collectedAt'),
       recycledAt: date('recycledAt'),
-      ecoPoints: json['ecoPoints'] as int?,
+      photoUrl: json['photoUrl'] as String?,
+      adminNote: json['adminNote'] as String?,
+      synced: json['synced'] as bool? ?? false,
+      ecoPoints: (json['ecoPoints'] as num?)?.toInt(),
     );
   }
 }

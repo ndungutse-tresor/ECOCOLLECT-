@@ -72,6 +72,11 @@
 	<string>EcoCollect lets you choose a photo of the e-waste you report.</string>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>EcoCollect uses your location to show the nearest drop-off points and to fill in your pickup address.</string>
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
 	<key>LSApplicationQueriesSchemes</key>
 	<array>
 		<string>https</string>

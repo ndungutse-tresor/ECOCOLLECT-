@@ -31,6 +31,12 @@ class StatusStyle {
           AppColors.successSoft,
           Icons.check_circle_rounded,
         );
+      case ItemStatus.rejected:
+        return const StatusStyle(
+          Color(0xFFB42318),
+          AppColors.errorSoft,
+          Icons.block_rounded,
+        );
     }
   }
 }

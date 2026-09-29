@@ -99,7 +99,7 @@ class ReportSuccessScreen extends StatelessWidget {
                       const SizedBox(height: 10),
                       Text(
                         dropoff
-                            ? 'Bring your ${item.categoryName.toLowerCase()} to the drop-off point below and confirm the hand-over in the app.'
+                            ? 'Bring your ${item.categoryName.toLowerCase()} to the drop-off point below, then tap "I\'ve dropped it off" in My reports.'
                             : 'A registered collector will call you to confirm your pickup.',
                         textAlign: TextAlign.center,
                         style: const TextStyle(
@@ -210,8 +210,7 @@ class ReportSuccessScreen extends StatelessWidget {
                       Center(
                         child: TagChip(
                           icon: Icons.stars_rounded,
-                          label:
-                              '+${item.ecoPoints} EcoPoints pending hand-over',
+                          label: '+${item.ecoPoints} EcoPoints once verified',
                           color: AppColors.accentDark,
                           background: AppColors.accentSoft,
                         ),

@@ -7,6 +7,7 @@ import '../utils/constants.dart';
 import '../widgets/app_card.dart';
 import '../widgets/recent_item_tile.dart';
 import '../widgets/status_chip.dart';
+import '../widgets/sync_status.dart';
 import 'report_ewaste_screen.dart';
 
 class HistoryScreen extends StatefulWidget {
@@ -17,6 +18,12 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
+  static const _counted = [
+    ItemStatus.pending,
+    ItemStatus.collected,
+    ItemStatus.recycled,
+  ];
+
   ItemStatus? _filter;
 
   @override
@@ -34,90 +41,102 @@ class _HistoryScreenState extends State<HistoryScreen> {
         appBar: AppBar(
           title: const Text('My reports'),
           automaticallyImplyLeading: false,
-        ),
-        body: CustomScrollView(
-          slivers: [
-            SliverToBoxAdapter(
-              child: AppCard(
-                margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                child: Row(
-                  children: [
-                    for (final status in ItemStatus.values) ...[
-                      Expanded(
-                        child: _Counter(
-                          status: status,
-                          count: count(status),
-                        ),
-                      ),
-                      if (status != ItemStatus.values.last)
-                        Container(
-                          width: 1,
-                          height: 40,
-                          color: AppColors.border,
-                        ),
-                    ],
-                  ],
-                ),
-              ),
+          actions: const [
+            Padding(
+              padding: EdgeInsets.only(right: 16),
+              child: SyncStatusChip(),
             ),
-            SliverToBoxAdapter(
-              child: SizedBox(
-                height: 64,
-                child: ListView(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
-                  children: [
-                    _FilterChip(
-                      label: 'All · ${all.length}',
-                      selected: _filter == null,
-                      onTap: () => setState(() => _filter = null),
-                    ),
-                    for (final status in ItemStatus.values)
-                      _FilterChip(
-                        label: '${status.label} · ${count(status)}',
-                        selected: _filter == status,
-                        onTap: () => setState(() => _filter = status),
-                      ),
-                  ],
-                ),
-              ),
-            ),
-            if (items.isEmpty)
-              SliverFillRemaining(
-                hasScrollBody: false,
-                child: Center(
-                  child: EmptyState(
-                    icon: Icons.receipt_long_outlined,
-                    title: _filter == null
-                        ? 'No reports yet'
-                        : 'Nothing ${_filter!.label.toLowerCase()} yet',
-                    message: _filter == null
-                        ? 'Report your first e-waste item. It only takes a minute.'
-                        : 'Reports will show up here as they move along.',
-                    actionLabel: _filter == null ? 'Report e-waste' : null,
-                    onAction: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const ReportEwasteScreen(),
-                      ),
-                    ),
-                  ),
-                ),
-              )
-            else
-              SliverPadding(
-                padding: const EdgeInsets.only(bottom: 24),
-                sliver: SliverList.builder(
-                  itemCount: items.length,
-                  itemBuilder: (context, i) => RecentItemTile(
-                    item: items[i],
-                    service: service,
-                    detailed: true,
-                  ),
-                ),
-              ),
           ],
+        ),
+        body: RefreshIndicator(
+          color: AppColors.primary,
+          onRefresh: service.sync,
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(
+                child: AppCard(
+                  margin: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  child: Row(
+                    children: [
+                      for (final status in _counted) ...[
+                        Expanded(
+                          child: _Counter(
+                            status: status,
+                            count: count(status),
+                          ),
+                        ),
+                        if (status != _counted.last)
+                          Container(
+                            width: 1,
+                            height: 40,
+                            color: AppColors.border,
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: SizedBox(
+                  height: 64,
+                  child: ListView(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+                    children: [
+                      _FilterChip(
+                        label: 'All · ${all.length}',
+                        selected: _filter == null,
+                        onTap: () => setState(() => _filter = null),
+                      ),
+                      for (final status in ItemStatus.values)
+                        if (status != ItemStatus.rejected || count(status) > 0)
+                          _FilterChip(
+                            label: '${status.label} · ${count(status)}',
+                            selected: _filter == status,
+                            onTap: () => setState(() => _filter = status),
+                          ),
+                    ],
+                  ),
+                ),
+              ),
+              if (items.isEmpty)
+                SliverFillRemaining(
+                  hasScrollBody: false,
+                  child: Center(
+                    child: EmptyState(
+                      icon: Icons.receipt_long_outlined,
+                      title: _filter == null
+                          ? 'No reports yet'
+                          : 'Nothing ${_filter!.label.toLowerCase()} yet',
+                      message: _filter == null
+                          ? 'Report your first e-waste item. It only takes a minute.'
+                          : 'Reports will show up here as they move along.',
+                      actionLabel: _filter == null ? 'Report e-waste' : null,
+                      onAction: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const ReportEwasteScreen(),
+                        ),
+                      ),
+                    ),
+                  ),
+                )
+              else
+                SliverPadding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  sliver: SliverList.builder(
+                    itemCount: items.length,
+                    itemBuilder: (context, i) => RecentItemTile(
+                      item: items[i],
+                      service: service,
+                      detailed: true,
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
+import 'package:image_picker/image_picker.dart' show XFile;
 import 'package:shared_preferences/shared_preferences.dart';
+
+import '../models/cash_reward.dart';
 import '../models/dropoff_point.dart';
 import '../models/ewaste_item.dart';
 import '../models/reward.dart';
 import '../models/user_profile.dart';
 import '../utils/constants.dart';
+import 'api_client.dart';
 
 class MonthlyTotal {
   final DateTime month;
@@ -15,20 +22,29 @@ class MonthlyTotal {
   const MonthlyTotal(this.month, this.weightKg);
 }
 
-/// Holds the user's reports, points, rewards and profile, and persists them
-/// to local storage.
+enum SyncStatus { off, idle, syncing, synced, offline }
+
+/// Holds the member's reports, points, rewards and profile. Everything is
+/// saved on the device first and synced with the EcoCollect server whenever
+/// it is reachable, so the app keeps working offline.
 class EwasteService extends ChangeNotifier {
   static const _itemsKey = 'ecocollect.items';
   static const _redemptionsKey = 'ecocollect.redemptions';
+  static const _claimsKey = 'ecocollect.cashClaims';
   static const _profileKey = 'ecocollect.profile';
   static const _onboardedKey = 'ecocollect.onboarded';
+  static const _serverUrlKey = 'ecocollect.serverUrl';
+  static const _pendingDeletesKey = 'ecocollect.pendingDeletes';
 
-  EwasteService({this.seedDemoData = true}) {
+  /// [serverUrl] sets the default server (an empty string disables syncing).
+  EwasteService({String? serverUrl, http.Client? httpClient})
+      : _defaultServerUrl = serverUrl ?? ApiClient.defaultBaseUrl,
+        _httpClient = httpClient {
     ready = _load();
   }
 
-  /// Whether a fresh install starts with sample history for demos.
-  final bool seedDemoData;
+  final String _defaultServerUrl;
+  final http.Client? _httpClient;
 
   /// Completes once saved data has been loaded.
   late final Future<void> ready;
@@ -36,29 +52,38 @@ class EwasteService extends ChangeNotifier {
   SharedPreferences? _prefs;
   List<EwasteItem> _items = [];
   List<Redemption> _redemptions = [];
+  List<CashClaim> _claims = [];
+  List<String> _pendingDeletes = [];
   UserProfile? _profile;
   bool _onboarded = false;
   bool _loaded = false;
   final _random = Random();
+
+  String _serverUrl = '';
+  ApiClient? _api;
+  SyncStatus _syncStatus = SyncStatus.idle;
+  DateTime? _lastSyncedAt;
+  String? _syncError;
+  bool _syncing = false;
+  bool _syncAgain = false;
 
   Future<void> _load() async {
     try {
       final prefs = await SharedPreferences.getInstance();
       _prefs = prefs;
 
-      final itemsJson = prefs.getString(_itemsKey);
-      _items = itemsJson == null
-          ? (seedDemoData ? _demoItems() : [])
-          : (jsonDecode(itemsJson) as List)
-              .map((e) => EwasteItem.fromJson(e as Map<String, dynamic>))
-              .toList();
-
-      final redemptionsJson = prefs.getString(_redemptionsKey);
-      if (redemptionsJson != null) {
-        _redemptions = (jsonDecode(redemptionsJson) as List)
-            .map((e) => Redemption.fromJson(e as Map<String, dynamic>))
+      List<T> list<T>(String key, T Function(Map<String, dynamic>) parse) {
+        final raw = prefs.getString(key);
+        if (raw == null) return [];
+        return (jsonDecode(raw) as List)
+            .map((e) => parse(e as Map<String, dynamic>))
             .toList();
       }
+
+      _items = list(_itemsKey, EwasteItem.fromJson);
+      _redemptions = list(_redemptionsKey, Redemption.fromJson);
+      _claims = list(_claimsKey, CashClaim.fromJson);
+      _pendingDeletes = prefs.getStringList(_pendingDeletesKey) ?? [];
 
       final profileJson = prefs.getString(_profileKey);
       if (profileJson != null) {
@@ -67,12 +92,15 @@ class EwasteService extends ChangeNotifier {
         );
       }
       _onboarded = prefs.getBool(_onboardedKey) ?? false;
+      _serverUrl = ApiClient.normalizeUrl(
+        prefs.getString(_serverUrlKey) ?? _defaultServerUrl,
+      );
     } catch (e) {
       debugPrint('EcoCollect: could not load saved data: $e');
-      if (_items.isEmpty && seedDemoData) _items = _demoItems();
+      _serverUrl = ApiClient.normalizeUrl(_defaultServerUrl);
     }
 
-    if (_advanceStatuses()) await _save();
+    _syncStatus = _serverUrl.isEmpty ? SyncStatus.off : SyncStatus.idle;
     _sortItems();
     _loaded = true;
     notifyListeners();
@@ -82,14 +110,13 @@ class EwasteService extends ChangeNotifier {
     final prefs = _prefs;
     if (prefs == null) return;
     try {
-      await prefs.setString(
-        _itemsKey,
-        jsonEncode(_items.map((i) => i.toJson()).toList()),
-      );
-      await prefs.setString(
-        _redemptionsKey,
-        jsonEncode(_redemptions.map((r) => r.toJson()).toList()),
-      );
+      String encode(Iterable<dynamic> list) =>
+          jsonEncode(list.map((e) => e.toJson()).toList());
+      await prefs.setString(_itemsKey, encode(_items));
+      await prefs.setString(_redemptionsKey, encode(_redemptions));
+      await prefs.setString(_claimsKey, encode(_claims));
+      await prefs.setStringList(_pendingDeletesKey, _pendingDeletes);
+      await prefs.setString(_serverUrlKey, _serverUrl);
       if (_profile != null) {
         await prefs.setString(_profileKey, jsonEncode(_profile!.toJson()));
       }
@@ -102,86 +129,10 @@ class EwasteService extends ChangeNotifier {
   void _sortItems() =>
       _items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-  /// Collected items are processed by the recycler after a short delay.
-  bool _advanceStatuses() {
-    var changed = false;
-    final now = DateTime.now();
-    for (var i = 0; i < _items.length; i++) {
-      final item = _items[i];
-      final collectedAt = item.collectedAt;
-      if (item.status == ItemStatus.collected &&
-          collectedAt != null &&
-          now.difference(collectedAt) >= AppConstants.recycleProcessingTime) {
-        _items[i] = item.copyWith(
-          status: ItemStatus.recycled,
-          recycledAt: collectedAt.add(AppConstants.recycleProcessingTime),
-        );
-        changed = true;
-      }
-    }
-    return changed;
-  }
-
-  List<EwasteItem> _demoItems() {
-    final now = DateTime.now();
-    DateTime ago(int days, [int hours = 0]) =>
-        now.subtract(Duration(days: days, hours: hours));
-
-    return [
-      EwasteItem(
-        id: 'demo1',
-        categoryId: 'phones',
-        quantity: 2,
-        estimatedWeightKg: 0.4,
-        condition: ItemCondition.damaged,
-        description: 'Two old Nokia phones',
-        disposalMethod: DisposalMethod.dropoff,
-        dropoffPointId: 'dp1',
-        createdAt: ago(40),
-        status: ItemStatus.recycled,
-        collectedAt: ago(38),
-        recycledAt: ago(36),
-      ),
-      EwasteItem(
-        id: 'demo2',
-        categoryId: 'chargers',
-        quantity: 5,
-        estimatedWeightKg: 0.5,
-        disposalMethod: DisposalMethod.dropoff,
-        dropoffPointId: 'dp3',
-        createdAt: ago(21),
-        status: ItemStatus.recycled,
-        collectedAt: ago(20),
-        recycledAt: ago(18),
-      ),
-      EwasteItem(
-        id: 'demo3',
-        categoryId: 'computers',
-        quantity: 1,
-        estimatedWeightKg: 3.0,
-        condition: ItemCondition.damaged,
-        description: 'Laptop with a broken hinge',
-        disposalMethod: DisposalMethod.pickup,
-        pickup: PickupDetails(
-          address: 'KN 14 Ave, Kiyovu, Nyarugenge',
-          phone: '',
-          date: ago(2),
-          timeSlot: PickupDetails.timeSlots.first,
-        ),
-        createdAt: ago(4),
-        status: ItemStatus.collected,
-        collectedAt: ago(1),
-      ),
-      EwasteItem(
-        id: 'demo4',
-        categoryId: 'batteries',
-        quantity: 8,
-        estimatedWeightKg: 1.2,
-        disposalMethod: DisposalMethod.dropoff,
-        dropoffPointId: 'dp4',
-        createdAt: ago(0, 5),
-      ),
-    ];
+  Future<void> _changed() async {
+    notifyListeners();
+    await _save();
+    unawaited(sync());
   }
 
   // ---------------------------------------------------------------------------
@@ -209,7 +160,7 @@ class EwasteService extends ChangeNotifier {
 
   Iterable<EwasteItem> get _credited => _items.where((i) => i.isCredited);
 
-  /// Weight actually handed over (collected or recycled).
+  /// Verified weight (collected or recycled).
   double get totalWeightKg =>
       _credited.fold(0.0, (sum, i) => sum + i.estimatedWeightKg);
 
@@ -218,10 +169,10 @@ class EwasteService extends ChangeNotifier {
 
   double get co2Prevented => totalWeightKg * AppConstants.co2PerKg;
 
-  /// All points ever credited. Drives the user's level.
+  /// All points ever credited. Drives the member's level.
   int get earnedPoints => _credited.fold(0, (sum, i) => sum + i.ecoPoints);
 
-  /// Points waiting for pending reports to be handed over.
+  /// Points waiting for pending reports to be verified.
   int get pendingPoints => pendingItems.fold(0, (sum, i) => sum + i.ecoPoints);
 
   int get spentPoints => _redemptions.fold(0, (sum, r) => sum + r.cost);
@@ -249,7 +200,17 @@ class EwasteService extends ChangeNotifier {
     return null;
   }
 
-  /// Handed-over weight per category, largest first.
+  /// Where to load a report photo from: the local file, or the uploaded copy.
+  String? photoFor(EwasteItem item) {
+    final url = item.photoUrl == null || _serverUrl.isEmpty
+        ? null
+        : '$_serverUrl${item.photoUrl}';
+    // Web blob URLs only live for one session, so prefer the uploaded copy.
+    if (kIsWeb) return url ?? item.photoPath;
+    return item.photoPath ?? url;
+  }
+
+  /// Verified weight per category, largest first.
   List<MapEntry<EwasteCategory, double>> get weightByCategory {
     final totals = <String, double>{};
     for (final item in _credited) {
@@ -263,7 +224,7 @@ class EwasteService extends ChangeNotifier {
     return entries;
   }
 
-  /// Handed-over weight for each of the last [months] calendar months.
+  /// Verified weight for each of the last [months] calendar months.
   List<MonthlyTotal> monthlyWeights({int months = 6}) {
     final now = DateTime.now();
     return List.generate(months, (i) {
@@ -276,7 +237,7 @@ class EwasteService extends ChangeNotifier {
     });
   }
 
-  /// Community impact (simulated baseline for the MVP plus this user's share).
+  /// Community impact (simulated baseline for the MVP plus this member's share).
   Map<String, num> get communityStats {
     final weight = 342.5 + totalWeightKg;
     return {
@@ -289,35 +250,84 @@ class EwasteService extends ChangeNotifier {
     };
   }
 
+  // Cash rewards --------------------------------------------------------------
+
+  List<CashClaim> get cashClaims {
+    final list = [..._claims];
+    list.sort((a, b) => b.requestedAt.compareTo(a.requestedAt));
+    return list;
+  }
+
+  CashClaim? latestClaimFor(CashMilestone milestone) {
+    for (final claim in cashClaims) {
+      if (claim.milestoneId == milestone.id) return claim;
+    }
+    return null;
+  }
+
+  bool canClaimCash(CashMilestone milestone) {
+    if (totalWeightKg < milestone.kg) return false;
+    final claim = latestClaimFor(milestone);
+    return claim == null || claim.status == ClaimStatus.rejected;
+  }
+
+  List<CashMilestone> get claimableMilestones =>
+      CashMilestone.all.where(canClaimCash).toList();
+
+  /// The next milestone the member has not reached yet.
+  CashMilestone? get nextCashMilestone {
+    for (final milestone in CashMilestone.all) {
+      if (totalWeightKg < milestone.kg) return milestone;
+    }
+    return null;
+  }
+
+  int get cashPaidRwf => _claims
+      .where((c) => c.status == ClaimStatus.paid)
+      .fold(0, (sum, c) => sum + c.amountRwf);
+
+  // Sync state ----------------------------------------------------------------
+
+  String get serverUrl => _serverUrl;
+  bool get syncEnabled => _serverUrl.isNotEmpty;
+  SyncStatus get syncStatus => _syncStatus;
+  DateTime? get lastSyncedAt => _lastSyncedAt;
+  String? get syncError => _syncError;
+
+  int get unsyncedCount =>
+      _items.where((i) => !i.synced).length +
+      _redemptions.where((r) => !r.synced).length +
+      _claims.where((c) => !c.synced).length +
+      _pendingDeletes.length;
+
   // ---------------------------------------------------------------------------
   // Actions
 
   Future<EwasteItem> addItem(EwasteItem item) async {
     _items.insert(0, item);
     _sortItems();
-    notifyListeners();
-    await _save();
+    await _changed();
     return item;
   }
 
-  /// Marks a pending report as handed over and returns the points credited.
-  Future<int> confirmHandOver(String id) async {
+  /// The member says the item was dropped off or picked up. Points are
+  /// credited once the EcoCollect team verifies it.
+  Future<void> confirmHandOver(String id) async {
     final index = _items.indexWhere((i) => i.id == id);
-    if (index == -1 || !_items[index].isPending) return 0;
-    final item = _items[index];
-    _items[index] = item.copyWith(
-      status: ItemStatus.collected,
-      collectedAt: DateTime.now(),
+    if (index == -1 || !_items[index].isPending) return;
+    _items[index] = _items[index].copyWith(
+      userConfirmedAt: DateTime.now(),
+      synced: false,
     );
-    notifyListeners();
-    await _save();
-    return item.ecoPoints;
+    await _changed();
   }
 
   Future<void> cancelItem(String id) async {
+    final before = _items.length;
     _items.removeWhere((i) => i.id == id && i.isPending);
-    notifyListeners();
-    await _save();
+    if (_items.length == before) return;
+    if (!_pendingDeletes.contains(id)) _pendingDeletes.add(id);
+    await _changed();
   }
 
   /// Spends points on [reward]. Returns null when the balance is too low.
@@ -331,8 +341,7 @@ class EwasteService extends ChangeNotifier {
       redeemedAt: DateTime.now(),
     );
     _redemptions.add(redemption);
-    notifyListeners();
-    await _save();
+    await _changed();
     return redemption;
   }
 
@@ -343,26 +352,215 @@ class EwasteService extends ChangeNotifier {
     return 'ECO-${block()}-${block()}';
   }
 
+  /// Requests a Mobile Money payout for [milestone].
+  Future<CashClaim?> claimCash(
+    CashMilestone milestone, {
+    required String momoNumber,
+    required String provider,
+  }) async {
+    if (!canClaimCash(milestone)) return null;
+    final claim = CashClaim(
+      id: 'c_${DateTime.now().microsecondsSinceEpoch}',
+      milestoneId: milestone.id,
+      amountRwf: milestone.amountRwf,
+      momoNumber: momoNumber.trim(),
+      provider: provider,
+      requestedAt: DateTime.now(),
+    );
+    _claims.add(claim);
+    await _changed();
+    return claim;
+  }
+
   Future<void> completeOnboarding(UserProfile profile) async {
     _profile = profile;
     _onboarded = true;
-    notifyListeners();
-    await _save();
+    await _changed();
   }
 
   Future<void> updateProfile(UserProfile profile) async {
     _profile = profile;
+    await _changed();
+  }
+
+  Future<void> setServerUrl(String url) async {
+    _serverUrl = ApiClient.normalizeUrl(url);
+    _api = null;
+    _syncStatus = _serverUrl.isEmpty ? SyncStatus.off : SyncStatus.idle;
+    _syncError = null;
+    await _changed();
+  }
+
+  /// Clears this device's data. Server records are kept.
+  Future<void> resetAll() async {
+    final serverUrl = _serverUrl;
+    await _prefs?.clear();
+    _items = [];
+    _redemptions = [];
+    _claims = [];
+    _pendingDeletes = [];
+    _profile = null;
+    _onboarded = false;
+    _serverUrl = serverUrl;
+    _lastSyncedAt = null;
     notifyListeners();
     await _save();
   }
 
-  /// Clears everything and restores the demo history.
-  Future<void> resetAll() async {
-    await _prefs?.clear();
-    _items = seedDemoData ? _demoItems() : [];
-    _redemptions = [];
-    _profile = null;
-    _onboarded = false;
+  // ---------------------------------------------------------------------------
+  // Sync
+
+  /// Pushes local changes, then pulls the latest statuses from the server.
+  Future<void> sync() async {
+    final profile = _profile;
+    if (!_loaded || profile == null || _serverUrl.isEmpty) return;
+    if (_syncing) {
+      _syncAgain = true;
+      return;
+    }
+    _syncing = true;
+    _syncStatus = SyncStatus.syncing;
+    notifyListeners();
+
+    final api = _api ??= ApiClient(_serverUrl, client: _httpClient);
+    try {
+      await api.upsertUser(profile);
+      await _pushDeletes(api, profile.id);
+      await _pushItems(api, profile.id);
+      await _pushRedemptions(api, profile.id);
+      await _pushClaims(api, profile.id);
+      applyServerState(await api.fetchUserState(profile.id));
+      _syncStatus = SyncStatus.synced;
+      _lastSyncedAt = DateTime.now();
+      _syncError = null;
+    } catch (e) {
+      _syncStatus = SyncStatus.offline;
+      _syncError = e.toString();
+    }
+
+    _syncing = false;
+    notifyListeners();
+    await _save();
+    if (_syncAgain) {
+      _syncAgain = false;
+      unawaited(sync());
+    }
+  }
+
+  Future<void> _pushDeletes(ApiClient api, String userId) async {
+    for (final id in [..._pendingDeletes]) {
+      try {
+        await api.deleteReport(userId, id);
+      } on ApiException catch (e) {
+        if (!e.isRejection) rethrow;
+      }
+      _pendingDeletes.remove(id);
+    }
+  }
+
+  Future<void> _pushItems(ApiClient api, String userId) async {
+    for (final item in _items.where((i) => !i.synced).toList()) {
+      String? photo;
+      if (item.photoPath != null && item.photoUrl == null) {
+        photo = await _readPhoto(item.photoPath!);
+      }
+      EwasteItem updated;
+      try {
+        final saved = await api.upsertReport(userId, item, photoBase64: photo);
+        updated = EwasteItem.fromJson(saved)
+            .copyWith(photoPath: item.photoPath, synced: true);
+      } on ApiException catch (e) {
+        if (!e.isRejection) rethrow;
+        updated = item.copyWith(synced: true);
+      }
+      // Keep any change the member made while the request was in flight.
+      final index = _items.indexWhere((i) => i.id == item.id);
+      if (index != -1 && identical(_items[index], item)) {
+        _items[index] = updated;
+      }
+    }
+  }
+
+  Future<void> _pushRedemptions(ApiClient api, String userId) async {
+    for (final redemption in _redemptions.where((r) => !r.synced).toList()) {
+      try {
+        await api.createRedemption(userId, redemption);
+      } on ApiException catch (e) {
+        if (!e.isRejection) rethrow;
+      }
+      final index = _redemptions.indexWhere((r) => r.id == redemption.id);
+      if (index != -1) _redemptions[index] = redemption.markSynced();
+    }
+  }
+
+  Future<void> _pushClaims(ApiClient api, String userId) async {
+    for (final claim in _claims.where((c) => !c.synced).toList()) {
+      CashClaim updated;
+      try {
+        await api.createCashClaim(userId, claim);
+        updated = claim.copyWith(synced: true);
+      } on ApiException catch (e) {
+        if (!e.isRejection) rethrow;
+        updated = claim.copyWith(
+          status: ClaimStatus.rejected,
+          note: e.message,
+          synced: true,
+        );
+      }
+      final index = _claims.indexWhere((c) => c.id == claim.id);
+      if (index != -1) _claims[index] = updated;
+    }
+  }
+
+  Future<String?> _readPhoto(String path) async {
+    try {
+      return base64Encode(await XFile(path).readAsBytes());
+    } catch (e) {
+      debugPrint('EcoCollect: could not read photo for upload: $e');
+      return null;
+    }
+  }
+
+  /// Merges the server's copy of this member's data. The server decides
+  /// statuses; local changes that have not been pushed yet are kept.
+  @visibleForTesting
+  void applyServerState(Map<String, dynamic> state) {
+    List<Map<String, dynamic>> docs(String key) =>
+        (state[key] as List? ?? const []).cast<Map<String, dynamic>>();
+
+    final localItems = {for (final item in _items) item.id: item};
+    final items = <EwasteItem>[];
+    for (final json in docs('reports')) {
+      final server = EwasteItem.fromJson(json);
+      if (_pendingDeletes.contains(server.id)) continue;
+      final local = localItems.remove(server.id);
+      items.add(server.copyWith(
+        // The server owns the status; the member owns their hand-over
+        // confirmation, which may not have been sent yet.
+        userConfirmedAt: server.userConfirmedAt ?? local?.userConfirmedAt,
+        photoPath: local?.photoPath,
+        synced: local == null || local.synced,
+      ));
+    }
+    items.addAll(localItems.values.where((i) => !i.synced));
+    _items = items;
+    _sortItems();
+
+    final serverRedemptions =
+        docs('redemptions').map((j) => Redemption.fromJson(j).markSynced());
+    final redemptionIds = serverRedemptions.map((r) => r.id).toSet();
+    _redemptions = [
+      ...serverRedemptions,
+      ..._redemptions.where((r) => !r.synced && !redemptionIds.contains(r.id)),
+    ];
+
+    final serverClaims = docs('cashClaims')
+        .map((j) => CashClaim.fromJson(j).copyWith(synced: true));
+    final claimIds = serverClaims.map((c) => c.id).toSet();
+    _claims = [
+      ...serverClaims,
+      ..._claims.where((c) => !c.synced && !claimIds.contains(c.id)),
+    ];
     notifyListeners();
   }
 }

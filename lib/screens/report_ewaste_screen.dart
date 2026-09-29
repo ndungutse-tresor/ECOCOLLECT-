@@ -936,7 +936,7 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
                     ),
                     const SizedBox(height: 2),
                     const Text(
-                      'Credited as soon as your e-waste is handed over.',
+                      'Credited once EcoCollect verifies the hand-over.',
                       style:
                           TextStyle(fontSize: 12.5, color: Color(0xFF92400E)),
                     ),

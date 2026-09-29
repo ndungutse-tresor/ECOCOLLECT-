@@ -74,6 +74,7 @@ class Redemption {
   final String code;
   final int cost;
   final DateTime redeemedAt;
+  final bool synced;
 
   const Redemption({
     required this.id,
@@ -81,7 +82,17 @@ class Redemption {
     required this.code,
     required this.cost,
     required this.redeemedAt,
+    this.synced = false,
   });
+
+  Redemption markSynced() => Redemption(
+        id: id,
+        rewardId: rewardId,
+        code: code,
+        cost: cost,
+        redeemedAt: redeemedAt,
+        synced: true,
+      );
 
   Reward? get reward => Reward.byId(rewardId);
 
@@ -91,14 +102,16 @@ class Redemption {
         'code': code,
         'cost': cost,
         'redeemedAt': redeemedAt.toIso8601String(),
+        'synced': synced,
       };
 
   factory Redemption.fromJson(Map<String, dynamic> json) => Redemption(
         id: json['id'] as String,
         rewardId: json['rewardId'] as String,
         code: json['code'] as String,
-        cost: json['cost'] as int,
+        cost: (json['cost'] as num).toInt(),
         redeemedAt: DateTime.parse(json['redeemedAt'] as String),
+        synced: json['synced'] as bool? ?? false,
       );
 }
 
