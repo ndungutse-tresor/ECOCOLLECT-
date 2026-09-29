@@ -78,7 +78,8 @@ void main() {
 
       final redemption = await service.redeem(coffee);
       expect(redemption, isNotNull);
-      expect(redemption!.code, matches(RegExp(r'^ECO-[A-Z0-9]{4}-[A-Z0-9]{4}$')));
+      expect(
+          redemption!.code, matches(RegExp(r'^ECO-[A-Z0-9]{4}-[A-Z0-9]{4}$')));
       expect(service.ecoPoints, 31);
       expect(service.spentPoints, 100);
     });
@@ -93,8 +94,7 @@ void main() {
       expect(second.getItemById('persisted'), isNotNull);
     });
 
-    test('collected items become recycled after the processing time',
-        () async {
+    test('collected items become recycled after the processing time', () async {
       final collectedAt = DateTime.now().subtract(const Duration(days: 3));
       final item = EwasteItem(
         id: 'old',
@@ -161,11 +161,15 @@ void main() {
     expect(find.text('Report your e-waste'), findsOneWidget);
 
     await tester.tap(find.text('Skip'));
+    await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('Welcome! Let’s set you up'), findsOneWidget);
 
     await tester.enterText(find.byType(TextFormField).first, 'Aline Uwase');
+    await tester.ensureVisible(find.text('Start recycling'));
+    await tester.pump();
     await tester.tap(find.text('Start recycling'));
+    await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
 

@@ -427,9 +427,8 @@ class _MonthlyChart extends StatelessWidget {
     const axisWidth = 44.0;
     final peak = data.map((d) => d.weightKg).fold(0.0, math.max);
     final top = _niceMax(peak);
-    final peakIndex = peak > 0
-        ? data.indexWhere((d) => d.weightKg == peak)
-        : -1;
+    final peakIndex =
+        peak > 0 ? data.indexWhere((d) => d.weightKg == peak) : -1;
     final lastIndex = data.length - 1;
 
     Widget gridLine(double fraction) => Positioned(
@@ -568,9 +567,8 @@ class _Bar extends StatelessWidget {
               curve: Curves.easeOutCubic,
               builder: (_, value, __) => Container(
                 width: 22,
-                height: total.weightKg > 0
-                    ? math.max(4, plotHeight * value)
-                    : 0,
+                height:
+                    total.weightKg > 0 ? math.max(4, plotHeight * value) : 0,
                 decoration: const BoxDecoration(
                   color: AppColors.primary,
                   borderRadius: BorderRadius.vertical(top: Radius.circular(4)),

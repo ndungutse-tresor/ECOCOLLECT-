@@ -79,7 +79,9 @@ class LocationService extends ChangeNotifier {
     } catch (e) {
       debugPrint('EcoCollect: location error: $e');
       _setStatus(
-        _position != null ? LocationStatus.available : LocationStatus.unavailable,
+        _position != null
+            ? LocationStatus.available
+            : LocationStatus.unavailable,
       );
     }
     return _position;

@@ -158,80 +158,80 @@ class _PageContent extends StatelessWidget {
       child: SingleChildScrollView(
         padding: const EdgeInsets.symmetric(horizontal: 32),
         child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          SizedBox(
-            width: 260,
-            height: 260,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                Container(
-                  width: 250,
-                  height: 250,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: page.color.withValues(alpha: 0.07),
-                  ),
-                ),
-                Container(
-                  width: 180,
-                  height: 180,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: page.color.withValues(alpha: 0.12),
-                  ),
-                ),
-                Container(
-                  width: 112,
-                  height: 112,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: Colors.white,
-                    boxShadow: AppShadows.floating,
-                  ),
-                  child: Icon(page.icon, size: 52, color: page.color),
-                )
-                    .animate()
-                    .scale(
-                      begin: const Offset(0.8, 0.8),
-                      duration: 500.ms,
-                      curve: Curves.easeOutBack,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 260,
+              height: 260,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 250,
+                    height: 250,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: page.color.withValues(alpha: 0.07),
                     ),
-                Positioned(
-                  left: 18,
-                  top: 50,
-                  child: _FloatingIcon(icon: page.leftIcon, color: page.color),
-                ),
-                Positioned(
-                  right: 16,
-                  bottom: 46,
-                  child: _FloatingIcon(icon: page.rightIcon, color: page.color),
-                ),
-              ],
+                  ),
+                  Container(
+                    width: 180,
+                    height: 180,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: page.color.withValues(alpha: 0.12),
+                    ),
+                  ),
+                  Container(
+                    width: 112,
+                    height: 112,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white,
+                      boxShadow: AppShadows.floating,
+                    ),
+                    child: Icon(page.icon, size: 52, color: page.color),
+                  ).animate().scale(
+                        begin: const Offset(0.8, 0.8),
+                        duration: 500.ms,
+                        curve: Curves.easeOutBack,
+                      ),
+                  Positioned(
+                    left: 18,
+                    top: 50,
+                    child:
+                        _FloatingIcon(icon: page.leftIcon, color: page.color),
+                  ),
+                  Positioned(
+                    right: 16,
+                    bottom: 46,
+                    child:
+                        _FloatingIcon(icon: page.rightIcon, color: page.color),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 40),
-          Text(
-            page.title,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -0.5,
-            ),
-          ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2),
-          const SizedBox(height: 12),
-          Text(
-            page.body,
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              fontSize: 15,
-              height: 1.5,
-              color: AppColors.textSecondary,
-            ),
-          ).animate().fadeIn(delay: 120.ms, duration: 400.ms),
-        ],
+            const SizedBox(height: 40),
+            Text(
+              page.title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+              ),
+            ).animate().fadeIn(duration: 400.ms).slideY(begin: 0.2),
+            const SizedBox(height: 12),
+            Text(
+              page.body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.5,
+                color: AppColors.textSecondary,
+              ),
+            ).animate().fadeIn(delay: 120.ms, duration: 400.ms),
+          ],
         ),
       ),
     );

@@ -99,7 +99,8 @@ class EwasteService extends ChangeNotifier {
     }
   }
 
-  void _sortItems() => _items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+  void _sortItems() =>
+      _items.sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
   /// Collected items are processed by the recycler after a short delay.
   bool _advanceStatuses() {

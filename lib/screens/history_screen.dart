@@ -23,9 +23,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final service = context.watch<EwasteService>();
     final all = service.items;
-    final items = _filter == null
-        ? all
-        : all.where((i) => i.status == _filter).toList();
+    final items =
+        _filter == null ? all : all.where((i) => i.status == _filter).toList();
 
     int count(ItemStatus s) => all.where((i) => i.status == s).length;
 

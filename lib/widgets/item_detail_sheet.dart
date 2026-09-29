@@ -139,12 +139,12 @@ class ItemDetailSheet extends StatelessWidget {
   Future<void> _confirmHandOver(BuildContext context, EwasteItem item) async {
     final messenger = ScaffoldMessenger.of(context);
     final navigator = Navigator.of(context);
-    final points =
-        await context.read<EwasteService>().confirmHandOver(item.id);
+    final points = await context.read<EwasteService>().confirmHandOver(item.id);
     navigator.pop();
     messenger.showSnackBar(
       SnackBar(
-        content: Text('Thank you! +$points EcoPoints credited to your balance.'),
+        content:
+            Text('Thank you! +$points EcoPoints credited to your balance.'),
         backgroundColor: AppColors.primary,
       ),
     );
@@ -305,7 +305,8 @@ class _PickupSection extends StatelessWidget {
       children: [
         const _DetailRow('Disposal', 'Home pickup'),
         _DetailRow('Address', pickup.address),
-        _DetailRow('When', '${formatShortDay(pickup.date)}\n${pickup.timeSlot}'),
+        _DetailRow(
+            'When', '${formatShortDay(pickup.date)}\n${pickup.timeSlot}'),
         if (pickup.phone.isNotEmpty) _DetailRow('Phone', pickup.phone),
       ],
     );
@@ -453,7 +454,8 @@ class _PointsBanner extends StatelessWidget {
                   : '+${item.ecoPoints} EcoPoints once handed over',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
-                color: credited ? AppColors.accentDark : AppColors.textSecondary,
+                color:
+                    credited ? AppColors.accentDark : AppColors.textSecondary,
               ),
             ),
           ),

@@ -78,7 +78,8 @@ class HomeScreen extends StatelessWidget {
               ),
             ).animate().fadeIn(delay: 80.ms, duration: 350.ms),
           ),
-          const SliverToBoxAdapter(child: SectionHeader(title: 'Quick actions')),
+          const SliverToBoxAdapter(
+              child: SectionHeader(title: 'Quick actions')),
           SliverToBoxAdapter(
             child: AppCard(
               margin: const EdgeInsets.symmetric(horizontal: 16),
@@ -328,7 +329,8 @@ class _Header extends StatelessWidget {
                                         ? 'Top level reached. Amazing!'
                                         : '${next.minPoints - service.earnedPoints} pts to ${next.name}',
                                     style: TextStyle(
-                                      color: Colors.white.withValues(alpha: 0.8),
+                                      color:
+                                          Colors.white.withValues(alpha: 0.8),
                                       fontSize: 12.5,
                                     ),
                                   ),
@@ -394,7 +396,8 @@ class _PointsPill extends StatelessWidget {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.stars_rounded, size: 20, color: AppColors.accent),
+              const Icon(Icons.stars_rounded,
+                  size: 20, color: AppColors.accent),
               const SizedBox(width: 5),
               Text(
                 formatNumber(points),

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_map/flutter_map.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:latlong2/latlong.dart' show LatLng;
 import 'package:provider/provider.dart';
 import '../models/dropoff_point.dart';
 import '../services/ewaste_service.dart';
@@ -26,6 +26,8 @@ class _MapScreenState extends State<MapScreen> {
     AppConstants.kigaliCenterLng,
   );
   static const _districtFilters = ['All', ...AppConstants.districts];
+  static const _listPanelFraction = 0.36;
+  static const _detailPanelHeight = 320.0;
 
   final _mapController = MapController();
   final _searchController = TextEditingController();
@@ -67,14 +69,32 @@ class _MapScreenState extends State<MapScreen> {
     return loc.sortByDistance(filtered);
   }
 
-  void _move(LatLng target, double zoom) {
-    if (_mapReady) _mapController.move(target, zoom);
+  /// The map runs under the search bar and the bottom panel, so camera moves
+  /// are padded to keep targets in the visible gap between them.
+  EdgeInsets _visibleArea({required bool detail}) {
+    final size = MediaQuery.sizeOf(context);
+    final top = MediaQuery.paddingOf(context).top + 130;
+    final panel =
+        detail ? _detailPanelHeight : size.height * _listPanelFraction;
+    return EdgeInsets.fromLTRB(40, top, 40, panel + 40);
+  }
+
+  void _focus(LatLng target, {double zoom = 15, bool detail = false}) {
+    if (!_mapReady) return;
+    _mapController.fitCamera(
+      CameraFit.coordinates(
+        coordinates: [target],
+        padding: _visibleArea(detail: detail),
+        maxZoom: zoom,
+        minZoom: zoom,
+      ),
+    );
   }
 
   void _select(DropoffPoint point) {
     FocusScope.of(context).unfocus();
     setState(() => _selected = point);
-    _move(LatLng(point.latitude, point.longitude), 15);
+    _focus(LatLng(point.latitude, point.longitude), detail: true);
   }
 
   void _fitAll(List<DropoffPoint> points, LatLng? me) {
@@ -85,13 +105,14 @@ class _MapScreenState extends State<MapScreen> {
     ];
     if (coords.isEmpty) return;
     if (coords.length == 1) {
-      _move(coords.first, 15);
+      _focus(coords.first, detail: _selected != null);
       return;
     }
     _mapController.fitCamera(
-      CameraFit.bounds(
-        bounds: LatLngBounds.fromPoints(coords),
-        padding: const EdgeInsets.fromLTRB(48, 150, 48, 48),
+      CameraFit.coordinates(
+        coordinates: coords,
+        padding: _visibleArea(detail: _selected != null),
+        maxZoom: 16,
       ),
     );
   }
@@ -101,7 +122,7 @@ class _MapScreenState extends State<MapScreen> {
     final messenger = ScaffoldMessenger.of(context);
     final position = await location.request();
     if (position != null) {
-      _move(position, 15);
+      _focus(position, detail: _selected != null);
     } else {
       messenger.showSnackBar(
         SnackBar(
@@ -128,239 +149,254 @@ class _MapScreenState extends State<MapScreen> {
       value: SystemUiOverlayStyle.dark,
       child: Scaffold(
         backgroundColor: AppColors.surface,
-        body: Column(
+        body: Stack(
           children: [
-            Expanded(
-              child: Stack(
+            Positioned.fill(
+              child: FlutterMap(
+                mapController: _mapController,
+                options: MapOptions(
+                  initialCenter: _kigali,
+                  initialZoom: 12.4,
+                  minZoom: 9,
+                  maxZoom: 18,
+                  interactionOptions: const InteractionOptions(
+                    flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+                  ),
+                  onMapReady: () {
+                    _mapReady = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) _fitAll(points, null);
+                    });
+                  },
+                  onTap: (_, __) {
+                    FocusScope.of(context).unfocus();
+                    if (_selected != null) setState(() => _selected = null);
+                  },
+                ),
                 children: [
-                  FlutterMap(
-                    mapController: _mapController,
-                    options: MapOptions(
-                      initialCenter: _kigali,
-                      initialZoom: 12.4,
-                      minZoom: 9,
-                      maxZoom: 18,
-                      interactionOptions: const InteractionOptions(
-                        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-                      ),
-                      onMapReady: () => _mapReady = true,
-                      onTap: (_, __) {
-                        FocusScope.of(context).unfocus();
-                        if (_selected != null) setState(() => _selected = null);
-                      },
-                    ),
-                    children: [
-                      TileLayer(
-                        urlTemplate:
-                            'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-                        userAgentPackageName: 'rw.ecocollect.app',
-                        maxZoom: 19,
-                      ),
-                      if (location.position != null)
-                        MarkerLayer(
-                          markers: [
-                            Marker(
-                              point: location.position!,
-                              width: 30,
-                              height: 30,
-                              child: const _UserDot(),
-                            ),
-                          ],
-                        ),
-                      MarkerLayer(
-                        markers: [
-                          for (final point in points)
-                            Marker(
-                              point: LatLng(point.latitude, point.longitude),
-                              width: 48,
-                              height: 58,
-                              alignment: Alignment.topCenter,
-                              child: _PointPin(
-                                point: point,
-                                selected: selected?.id == point.id,
-                                onTap: () => _select(point),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
+                  TileLayer(
+                    urlTemplate:
+                        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                    userAgentPackageName: 'rw.ecocollect.app',
+                    maxZoom: 19,
                   ),
-                  // Search and filters
-                  Positioned(
-                    top: 0,
-                    left: 0,
-                    right: 0,
-                    child: SafeArea(
-                      bottom: false,
-                      child: Column(
-                        children: [
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(18),
-                                boxShadow: AppShadows.card,
-                              ),
-                              child: TextField(
-                                controller: _searchController,
-                                onChanged: (v) => setState(() => _query = v),
-                                textInputAction: TextInputAction.search,
-                                decoration: InputDecoration(
-                                  hintText: 'Search drop-off points',
-                                  prefixIcon: const Icon(Icons.search_rounded),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(18),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(18),
-                                    borderSide: const BorderSide(
-                                      color: AppColors.primary,
-                                      width: 1.6,
-                                    ),
-                                  ),
-                                  suffixIcon: _query.isEmpty
-                                      ? null
-                                      : IconButton(
-                                          tooltip: 'Clear',
-                                          icon: const Icon(Icons.close_rounded),
-                                          onPressed: () {
-                                            _searchController.clear();
-                                            setState(() => _query = '');
-                                          },
-                                        ),
-                                ),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 10),
-                          SizedBox(
-                            height: 38,
-                            child: ListView(
-                              scrollDirection: Axis.horizontal,
-                              clipBehavior: Clip.none,
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 16),
-                              children: [
-                                _FilterPill(
-                                  label: 'Open now',
-                                  icon: Icons.schedule_rounded,
-                                  selected: _openNowOnly,
-                                  onTap: () => setState(
-                                    () => _openNowOnly = !_openNowOnly,
-                                  ),
-                                ),
-                                for (final d in _districtFilters)
-                                  _FilterPill(
-                                    label: d,
-                                    selected: _district == d,
-                                    onTap: () {
-                                      setState(() {
-                                        _district = d;
-                                        _selected = null;
-                                      });
-                                      WidgetsBinding.instance
-                                          .addPostFrameCallback((_) {
-                                        if (!mounted) return;
-                                        _fitAll(
-                                          _filter(service.dropoffPoints,
-                                              location),
-                                          null,
-                                        );
-                                      });
-                                    },
-                                  ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  // Map controls
-                  Positioned(
-                    right: 16,
-                    bottom: 40,
-                    child: Column(
-                      children: [
-                        _MapButton(
-                          tooltip: 'Show all points',
-                          icon: Icons.zoom_out_map_rounded,
-                          onPressed: () => _fitAll(points, location.position),
-                        ),
-                        const SizedBox(height: 10),
-                        _MapButton(
-                          tooltip: 'My location',
-                          icon: Icons.my_location_rounded,
-                          loading: location.isLoading,
-                          onPressed: _locateMe,
+                  if (location.position != null)
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: location.position!,
+                          width: 30,
+                          height: 30,
+                          child: const _UserDot(),
                         ),
                       ],
                     ),
-                  ),
-                  // OpenStreetMap attribution (required by the tile policy)
-                  Positioned(
-                    left: 8,
-                    bottom: 32,
-                    child: GestureDetector(
-                      onTap: () => openExternalUrl(
-                        context,
-                        'https://www.openstreetmap.org/copyright',
-                      ),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 3,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.85),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          '© OpenStreetMap contributors',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            color: AppColors.textSecondary,
+                  MarkerLayer(
+                    markers: [
+                      for (final point in points)
+                        Marker(
+                          point: LatLng(point.latitude, point.longitude),
+                          width: 48,
+                          height: 58,
+                          alignment: Alignment.topCenter,
+                          child: _PointPin(
+                            point: point,
+                            selected: selected?.id == point.id,
+                            onTap: () => _select(point),
                           ),
                         ),
-                      ),
-                    ),
+                    ],
                   ),
                 ],
               ),
             ),
-            // Bottom panel overlaps the map by 24px.
-            Transform.translate(
-              offset: const Offset(0, -24),
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0x1A0B3D2C),
-                      blurRadius: 20,
-                      offset: Offset(0, -6),
-                    ),
-                  ],
-                ),
-                child: AnimatedSize(
-                  duration: const Duration(milliseconds: 250),
-                  curve: Curves.easeOutCubic,
-                  alignment: Alignment.topCenter,
-                  child: selected != null
-                      ? _PointDetail(
-                          point: selected,
-                          distance: location.distanceTo(selected),
-                          onClose: () => setState(() => _selected = null),
-                        )
-                      : _PointList(
-                          points: points,
-                          location: location,
-                          onSelect: _select,
+            // Overlays sit in the gap above the panel; empty areas let
+            // gestures through to the map underneath.
+            Column(
+              children: [
+                Expanded(
+                  child: Stack(
+                    children: [
+                      // Search and filters
+                      Positioned(
+                        top: 0,
+                        left: 0,
+                        right: 0,
+                        child: SafeArea(
+                          bottom: false,
+                          child: Column(
+                            children: [
+                              Padding(
+                                padding:
+                                    const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(18),
+                                    boxShadow: AppShadows.card,
+                                  ),
+                                  child: TextField(
+                                    controller: _searchController,
+                                    onChanged: (v) =>
+                                        setState(() => _query = v),
+                                    textInputAction: TextInputAction.search,
+                                    decoration: InputDecoration(
+                                      hintText: 'Search drop-off points',
+                                      prefixIcon:
+                                          const Icon(Icons.search_rounded),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(18),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(18),
+                                        borderSide: const BorderSide(
+                                          color: AppColors.primary,
+                                          width: 1.6,
+                                        ),
+                                      ),
+                                      suffixIcon: _query.isEmpty
+                                          ? null
+                                          : IconButton(
+                                              tooltip: 'Clear',
+                                              icon: const Icon(
+                                                  Icons.close_rounded),
+                                              onPressed: () {
+                                                _searchController.clear();
+                                                setState(() => _query = '');
+                                              },
+                                            ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                height: 38,
+                                child: ListView(
+                                  scrollDirection: Axis.horizontal,
+                                  clipBehavior: Clip.none,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 16),
+                                  children: [
+                                    _FilterPill(
+                                      label: 'Open now',
+                                      icon: Icons.schedule_rounded,
+                                      selected: _openNowOnly,
+                                      onTap: () => setState(
+                                        () => _openNowOnly = !_openNowOnly,
+                                      ),
+                                    ),
+                                    for (final d in _districtFilters)
+                                      _FilterPill(
+                                        label: d,
+                                        selected: _district == d,
+                                        onTap: () {
+                                          setState(() {
+                                            _district = d;
+                                            _selected = null;
+                                          });
+                                          WidgetsBinding.instance
+                                              .addPostFrameCallback((_) {
+                                            if (!mounted) return;
+                                            _fitAll(
+                                              _filter(service.dropoffPoints,
+                                                  location),
+                                              null,
+                                            );
+                                          });
+                                        },
+                                      ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
+                      ),
+                      // Map controls
+                      Positioned(
+                        right: 16,
+                        bottom: 16,
+                        child: Column(
+                          children: [
+                            _MapButton(
+                              tooltip: 'Show all points',
+                              icon: Icons.zoom_out_map_rounded,
+                              onPressed: () =>
+                                  _fitAll(points, location.position),
+                            ),
+                            const SizedBox(height: 10),
+                            _MapButton(
+                              tooltip: 'My location',
+                              icon: Icons.my_location_rounded,
+                              loading: location.isLoading,
+                              onPressed: _locateMe,
+                            ),
+                          ],
+                        ),
+                      ),
+                      // OpenStreetMap attribution (required by the tile policy)
+                      Positioned(
+                        left: 8,
+                        bottom: 8,
+                        child: GestureDetector(
+                          onTap: () => openExternalUrl(
+                            context,
+                            'https://www.openstreetmap.org/copyright',
+                          ),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: const Text(
+                              '© OpenStreetMap contributors',
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                color: AppColors.textSecondary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
+                Container(
+                  decoration: const BoxDecoration(
+                    color: AppColors.surface,
+                    borderRadius:
+                        BorderRadius.vertical(top: Radius.circular(28)),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Color(0x1A0B3D2C),
+                        blurRadius: 20,
+                        offset: Offset(0, -6),
+                      ),
+                    ],
+                  ),
+                  child: AnimatedSize(
+                    duration: const Duration(milliseconds: 250),
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: selected != null
+                        ? _PointDetail(
+                            point: selected,
+                            distance: location.distanceTo(selected),
+                            onClose: () => setState(() => _selected = null),
+                          )
+                        : _PointList(
+                            points: points,
+                            location: location,
+                            onSelect: _select,
+                          ),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
@@ -382,7 +418,8 @@ class _PointList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final height = MediaQuery.sizeOf(context).height * 0.36;
+    final height =
+        MediaQuery.sizeOf(context).height * _MapScreenState._listPanelFraction;
     return SizedBox(
       height: height,
       child: Column(
@@ -549,6 +586,9 @@ class _PointDetail extends StatelessWidget {
             children: [
               Expanded(
                 child: OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
                   onPressed: () => openDirections(context, point),
                   icon: const Icon(Icons.directions_rounded),
                   label: const Text('Directions'),
@@ -557,6 +597,9 @@ class _PointDetail extends StatelessWidget {
               const SizedBox(width: 12),
               Expanded(
                 child: FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                  ),
                   onPressed: () => Navigator.push(
                     context,
                     MaterialPageRoute(

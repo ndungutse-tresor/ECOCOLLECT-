@@ -3,7 +3,8 @@ import 'package:flutter/material.dart';
 class DropoffPoint {
   final String id;
   final String name;
-  final String type; // 'school', 'church', 'petrol_station', 'sector_office', 'market'
+  final String
+      type; // 'school', 'church', 'petrol_station', 'sector_office', 'market'
   final String address;
   final double latitude;
   final double longitude;
@@ -88,8 +89,7 @@ class DropoffPoint {
     return openDays.map((d) => names[d - 1]).join(', ');
   }
 
-  String get hoursLabel =>
-      '${_clock(opensAtMinute)}–${_clock(closesAtMinute)}';
+  String get hoursLabel => '${_clock(opensAtMinute)}–${_clock(closesAtMinute)}';
 
   String get operatingHours => '$daysLabel · $hoursLabel';
 

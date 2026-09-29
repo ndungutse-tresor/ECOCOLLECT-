@@ -85,7 +85,9 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
       case 1:
         return true;
       case 2:
-        return _method == DisposalMethod.dropoff ? _point != null : _pickupValid;
+        return _method == DisposalMethod.dropoff
+            ? _point != null
+            : _pickupValid;
       default:
         return !_submitting;
     }
@@ -112,7 +114,8 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Could not open the camera or gallery. Check app permissions.'),
+          content: Text(
+              'Could not open the camera or gallery. Check app permissions.'),
         ),
       );
     } finally {
@@ -130,7 +133,7 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
     } else {
       String? address;
       try {
-        final places = await placemarkFromCoordinates(
+        final places = await Geocoding().placemarkFromCoordinates(
           position.latitude,
           position.longitude,
         );
@@ -351,7 +354,8 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
                   ],
                 ),
               ),
-              TextButton(onPressed: () => _goTo(0), child: const Text('Change')),
+              TextButton(
+                  onPressed: () => _goTo(0), child: const Text('Change')),
             ],
           ),
         ),
@@ -363,8 +367,9 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
                 children: [
                   _RoundButton(
                     icon: Icons.remove_rounded,
-                    onPressed:
-                        _quantity > 1 ? () => setState(() => _quantity--) : null,
+                    onPressed: _quantity > 1
+                        ? () => setState(() => _quantity--)
+                        : null,
                   ),
                   Expanded(
                     child: Column(
@@ -665,9 +670,10 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
       return DateTime(now.year, now.month, now.day + 1 + i);
     });
     final phoneText = _phoneController.text;
-    final phoneError = phoneText.trim().isNotEmpty && !isValidRwandaPhone(phoneText)
-        ? 'Enter a valid Rwandan mobile number'
-        : null;
+    final phoneError =
+        phoneText.trim().isNotEmpty && !isValidRwandaPhone(phoneText)
+            ? 'Enter a valid Rwandan mobile number'
+            : null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -788,7 +794,8 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
                         : AppColors.textMuted,
                   ),
                   const SizedBox(width: 12),
-                  Text(slot, style: const TextStyle(fontWeight: FontWeight.w600)),
+                  Text(slot,
+                      style: const TextStyle(fontWeight: FontWeight.w600)),
                 ],
               ),
             ),
@@ -930,7 +937,8 @@ class _ReportEwasteScreenState extends State<ReportEwasteScreen> {
                     const SizedBox(height: 2),
                     const Text(
                       'Credited as soon as your e-waste is handed over.',
-                      style: TextStyle(fontSize: 12.5, color: Color(0xFF92400E)),
+                      style:
+                          TextStyle(fontSize: 12.5, color: Color(0xFF92400E)),
                     ),
                   ],
                 ),
@@ -970,9 +978,8 @@ class _StepProgress extends StatelessWidget {
                     duration: const Duration(milliseconds: 250),
                     height: 5,
                     decoration: BoxDecoration(
-                      color: done || active
-                          ? AppColors.primary
-                          : AppColors.border,
+                      color:
+                          done || active ? AppColors.primary : AppColors.border,
                       borderRadius: BorderRadius.circular(4),
                     ),
                   ),

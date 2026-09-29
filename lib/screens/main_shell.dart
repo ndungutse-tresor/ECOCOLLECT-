@@ -191,12 +191,14 @@ class _NavItem extends StatelessWidget {
             children: [
               AnimatedContainer(
                 duration: const Duration(milliseconds: 200),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
                 decoration: BoxDecoration(
                   color: selected ? AppColors.primarySoft : Colors.transparent,
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: Icon(selected ? activeIcon : icon, color: color, size: 24),
+                child:
+                    Icon(selected ? activeIcon : icon, color: color, size: 24),
               ),
               const SizedBox(height: 4),
               Text(

@@ -98,9 +98,8 @@ class RecentItemTile extends StatelessWidget {
                 Icon(
                   Icons.stars_rounded,
                   size: 16,
-                  color: item.isCredited
-                      ? AppColors.accent
-                      : AppColors.textMuted,
+                  color:
+                      item.isCredited ? AppColors.accent : AppColors.textMuted,
                 ),
                 const SizedBox(width: 4),
                 Text(

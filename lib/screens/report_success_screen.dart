@@ -43,7 +43,8 @@ class ReportSuccessScreen extends StatelessWidget {
             builder: (context, constraints) => SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 48),
+                constraints:
+                    BoxConstraints(minHeight: constraints.maxHeight - 48),
                 child: IntrinsicHeight(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -209,7 +210,8 @@ class ReportSuccessScreen extends StatelessWidget {
                       Center(
                         child: TagChip(
                           icon: Icons.stars_rounded,
-                          label: '+${item.ecoPoints} EcoPoints pending hand-over',
+                          label:
+                              '+${item.ecoPoints} EcoPoints pending hand-over',
                           color: AppColors.accentDark,
                           background: AppColors.accentSoft,
                         ),

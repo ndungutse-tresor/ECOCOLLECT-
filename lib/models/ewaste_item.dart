@@ -26,7 +26,8 @@ class EwasteCategory {
       icon: Icons.smartphone_rounded,
       color: Color(0xFF2563EB),
       description: 'Mobile phones, smartphones, tablets',
-      tip: 'Back up your data, remove SIM and memory cards, then factory-reset the device.',
+      tip:
+          'Back up your data, remove SIM and memory cards, then factory-reset the device.',
       avgWeightKg: 0.2,
     ),
     EwasteCategory(
@@ -35,7 +36,8 @@ class EwasteCategory {
       icon: Icons.laptop_chromebook_rounded,
       color: Color(0xFF4F46E5),
       description: 'Laptops, desktops, monitors',
-      tip: 'Sign out of your accounts and wipe the hard drive before handing it over.',
+      tip:
+          'Sign out of your accounts and wipe the hard drive before handing it over.',
       avgWeightKg: 3.0,
     ),
     EwasteCategory(
@@ -44,7 +46,8 @@ class EwasteCategory {
       icon: Icons.cable_rounded,
       color: Color(0xFFD97706),
       description: 'Phone chargers, USB cables, power adapters',
-      tip: 'Bundle cables together with a rubber band so they are easy to sort.',
+      tip:
+          'Bundle cables together with a rubber band so they are easy to sort.',
       avgWeightKg: 0.1,
     ),
     EwasteCategory(
@@ -53,7 +56,8 @@ class EwasteCategory {
       icon: Icons.battery_charging_full_rounded,
       color: Color(0xFFDC2626),
       description: 'Phone batteries, laptop batteries, AA/AAA',
-      tip: 'Tape the terminals and keep swollen batteries away from heat and water.',
+      tip:
+          'Tape the terminals and keep swollen batteries away from heat and water.',
       avgWeightKg: 0.15,
     ),
     EwasteCategory(
@@ -71,7 +75,8 @@ class EwasteCategory {
       icon: Icons.blender_rounded,
       color: Color(0xFF0D9488),
       description: 'Kettles, irons, fans, small electronics',
-      tip: 'Empty and dry kettles and irons. Water inside can damage other items.',
+      tip:
+          'Empty and dry kettles and irons. Water inside can damage other items.',
       avgWeightKg: 2.0,
     ),
     EwasteCategory(
@@ -80,7 +85,8 @@ class EwasteCategory {
       icon: Icons.tv_rounded,
       color: Color(0xFF7C3AED),
       description: 'Televisions, monitors, display screens',
-      tip: 'Carry screens upright and wrap cracked glass in cloth or cardboard.',
+      tip:
+          'Carry screens upright and wrap cracked glass in cloth or cardboard.',
       avgWeightKg: 8.0,
     ),
     EwasteCategory(
@@ -275,8 +281,8 @@ class EwasteItem {
           ? null
           : PickupDetails.fromJson(json['pickup'] as Map<String, dynamic>),
       createdAt: DateTime.parse(json['createdAt'] as String),
-      status: ItemStatus.values.asNameMap()[json['status']] ??
-          ItemStatus.pending,
+      status:
+          ItemStatus.values.asNameMap()[json['status']] ?? ItemStatus.pending,
       collectedAt: date('collectedAt'),
       recycledAt: date('recycledAt'),
       ecoPoints: json['ecoPoints'] as int?,

@@ -163,9 +163,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                         : null,
                     labelStyle: TextStyle(
                       fontWeight: FontWeight.w700,
-                      color: selected
-                          ? AppColors.primary
-                          : AppColors.textPrimary,
+                      color:
+                          selected ? AppColors.primary : AppColors.textPrimary,
                     ),
                     side: BorderSide(
                       color: selected ? AppColors.primary : AppColors.border,
