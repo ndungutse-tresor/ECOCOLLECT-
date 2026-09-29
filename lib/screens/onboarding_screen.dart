@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import '../utils/constants.dart';
-import 'profile_setup_screen.dart';
+import 'package:provider/provider.dart';
+import '../services/ewaste_service.dart';
+import 'app_root.dart';
 
 class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
@@ -64,9 +66,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   bool get _isLast => _page == _pages.length - 1;
 
-  void _finish() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const ProfileSetupScreen()),
+  Future<void> _finish() async {
+    final navigator = Navigator.of(context);
+    await context.read<EwasteService>().markIntroSeen();
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (_) => const AppRoot()),
     );
   }
 

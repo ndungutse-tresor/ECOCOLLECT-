@@ -14,14 +14,18 @@ class AdminMember {
   final String name;
   final String phone;
   final String district;
+  final String email;
   final DateTime? memberSince;
+  final DateTime? lastLoginAt;
 
   const AdminMember({
     required this.id,
     required this.name,
     required this.phone,
     required this.district,
+    this.email = '',
     this.memberSince,
+    this.lastLoginAt,
   });
 
   factory AdminMember.fromJson(Map<String, dynamic> json) => AdminMember(
@@ -29,7 +33,9 @@ class AdminMember {
         name: json['name'] as String? ?? 'Unknown member',
         phone: json['phone'] as String? ?? '',
         district: json['district'] as String? ?? '',
+        email: json['email'] as String? ?? '',
         memberSince: DateTime.tryParse(json['memberSince'] as String? ?? ''),
+        lastLoginAt: DateTime.tryParse(json['lastLoginAt'] as String? ?? ''),
       );
 }
 

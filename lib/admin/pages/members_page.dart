@@ -142,9 +142,13 @@ class _MemberRow extends StatelessWidget {
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     Text(
-                      [member.district, member.phone]
-                          .where((v) => v.isNotEmpty)
-                          .join(' · '),
+                      [
+                        member.district,
+                        member.phone,
+                        member.email,
+                        if (member.lastLoginAt != null)
+                          'last login ${timeAgo(member.lastLoginAt!).toLowerCase()}',
+                      ].where((v) => v.isNotEmpty).join(' · '),
                       style: const TextStyle(
                         fontSize: 12.5,
                         color: AppColors.textSecondary,

@@ -16,7 +16,8 @@ class ApiException implements Exception {
   final int? statusCode;
 
   /// The server understood the request but refused it (not a network problem).
-  bool get isRejection => statusCode != null && statusCode! >= 400;
+  bool get isRejection =>
+      statusCode != null && statusCode! >= 400 && statusCode != 401;
 
   @override
   String toString() => message;
@@ -24,12 +25,19 @@ class ApiException implements Exception {
 
 /// Talks to the EcoCollect server (see the `server` folder).
 class ApiClient {
-  ApiClient(String baseUrl, {this.adminKey, http.Client? client})
-      : baseUrl = normalizeUrl(baseUrl),
+  ApiClient(
+    String baseUrl, {
+    this.adminKey,
+    this.token,
+    http.Client? client,
+  })  : baseUrl = normalizeUrl(baseUrl),
         _client = client ?? http.Client();
 
   final String baseUrl;
   final String? adminKey;
+
+  /// Member session token from [login] or [register].
+  String? token;
   final http.Client _client;
 
   static const _timeout = Duration(seconds: 12);
@@ -74,6 +82,7 @@ class ApiClient {
     final request = http.Request(method, uri)
       ..headers['Content-Type'] = 'application/json';
     if (adminKey != null) request.headers['X-Admin-Key'] = adminKey!;
+    if (token != null) request.headers['Authorization'] = 'Bearer ${token!}';
     if (body != null) request.body = jsonEncode(body);
 
     final http.Response response;
@@ -100,44 +109,96 @@ class ApiClient {
 
   Future<void> health() => _send('GET', '/api/health');
 
-  // Members -------------------------------------------------------------------
+  // Accounts ------------------------------------------------------------------
 
-  Future<void> upsertUser(UserProfile profile) =>
-      _send('PUT', '/api/users/${profile.id}', body: profile.toJson());
+  /// Creates an account and returns the session token and profile.
+  Future<(String, UserProfile)> register({
+    required String name,
+    required String phone,
+    required String district,
+    required String password,
+    String email = '',
+  }) async {
+    final body = await _send('POST', '/api/auth/register', body: {
+      'name': name,
+      'phone': phone,
+      'district': district,
+      'email': email,
+      'password': password,
+    }) as Map<String, dynamic>;
+    return _session(body);
+  }
 
-  Future<Map<String, dynamic>> fetchUserState(String userId) async =>
-      await _send('GET', '/api/users/$userId/state') as Map<String, dynamic>;
+  Future<(String, UserProfile)> login(String phone, String password) async {
+    final body = await _send(
+      'POST',
+      '/api/auth/login',
+      body: {'phone': phone, 'password': password},
+    ) as Map<String, dynamic>;
+    return _session(body);
+  }
+
+  (String, UserProfile) _session(Map<String, dynamic> body) {
+    token = body['token'] as String;
+    return (
+      token!,
+      UserProfile.fromJson(body['user'] as Map<String, dynamic>),
+    );
+  }
+
+  Future<void> logout() => _send('POST', '/api/auth/logout');
+
+  Future<UserProfile> updateProfile({
+    required String name,
+    required String phone,
+    required String district,
+    String email = '',
+  }) async {
+    final body = await _send('PUT', '/api/me', body: {
+      'name': name,
+      'phone': phone,
+      'district': district,
+      'email': email,
+    }) as Map<String, dynamic>;
+    return UserProfile.fromJson(body);
+  }
+
+  Future<void> changePassword(String current, String next) => _send(
+        'PUT',
+        '/api/me/password',
+        body: {'currentPassword': current, 'newPassword': next},
+      );
+
+  // Member data ---------------------------------------------------------------
+
+  Future<Map<String, dynamic>> fetchMyState() async =>
+      await _send('GET', '/api/me/state') as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> upsertReport(
-    String userId,
     EwasteItem item, {
     String? photoBase64,
   }) async {
     final body = {
       ...item.toJson(),
-      'userId': userId,
       if (photoBase64 != null) 'photoBase64': photoBase64,
     };
     return await _send('PUT', '/api/reports/${item.id}', body: body)
         as Map<String, dynamic>;
   }
 
-  Future<void> deleteReport(String userId, String reportId) => _send(
-        'DELETE',
-        '/api/reports/$reportId',
-        query: {'userId': userId},
-      );
+  Future<void> deleteReport(String reportId) =>
+      _send('DELETE', '/api/reports/$reportId');
 
-  Future<void> createRedemption(String userId, Redemption redemption) => _send(
+  Future<void> createRedemption(Redemption redemption) => _send(
         'PUT',
         '/api/redemptions/${redemption.id}',
-        body: {...redemption.toJson(), 'userId': userId},
+        body: redemption.toJson(),
       );
 
-  Future<void> createCashClaim(String userId, CashClaim claim) => _send(
+  Future<void> createCashClaim(CashClaim claim) => _send(
         'PUT',
         '/api/cash-claims/${claim.id}',
-        body: {...claim.toJson(), 'userId': userId},
+        body: claim.toJson(),
       );
 
   // Admin ---------------------------------------------------------------------

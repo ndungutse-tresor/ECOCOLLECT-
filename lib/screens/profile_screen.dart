@@ -9,8 +9,9 @@ import '../widgets/app_card.dart';
 import '../widgets/app_logo.dart';
 import '../widgets/sync_status.dart';
 import 'ecopoints_screen.dart';
-import 'onboarding_screen.dart';
-import 'profile_setup_screen.dart';
+import '../widgets/server_settings.dart';
+import 'change_password_screen.dart';
+import 'edit_profile_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -20,56 +21,17 @@ class ProfileScreen extends StatelessWidget {
     Navigator.of(context).popUntil((route) => route.isFirst);
   }
 
-  Future<void> _editServer(BuildContext context, EwasteService service) async {
-    final controller = TextEditingController(text: service.serverUrl);
-    final url = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Server address'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Use the address printed by the EcoCollect server, e.g. http://192.168.1.10:8787. Leave empty to keep data on this device only.',
-              style: TextStyle(color: AppColors.textSecondary, height: 1.4),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              autofocus: true,
-              keyboardType: TextInputType.url,
-              decoration: const InputDecoration(hintText: 'http://…:8787'),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, controller.text),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
-    if (url != null) await service.setServerUrl(url);
-  }
-
-  Future<void> _reset(BuildContext context) async {
+  Future<void> _logout(BuildContext context) async {
     final service = context.read<EwasteService>();
-    final navigator = Navigator.of(context);
-    final shell = context.read<ShellController>();
+    final waiting = service.unsyncedCount;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Reset app data?'),
-        content: const Text(
-          'Your profile, reports, EcoPoints and vouchers on this device will be deleted. '
-          'This cannot be undone.',
+        title: const Text('Log out?'),
+        content: Text(
+          waiting > 0
+              ? '$waiting change${waiting == 1 ? '' : 's'} have not reached the server yet and will be lost. Connect to the internet and sync first to keep them.'
+              : 'Your reports, points and rewards stay safe in your account. Log in again any time.',
         ),
         actions: [
           TextButton(
@@ -79,18 +41,12 @@ class ProfileScreen extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: TextButton.styleFrom(foregroundColor: AppColors.error),
-            child: const Text('Reset'),
+            child: const Text('Log out'),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
-    await service.resetAll();
-    shell.goTo(ShellController.home);
-    navigator.pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const OnboardingScreen()),
-      (_) => false,
-    );
+    if (confirmed == true) await service.logout();
   }
 
   @override
@@ -158,7 +114,7 @@ class ProfileScreen extends StatelessWidget {
                     onPressed: () => Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => ProfileSetupScreen(existing: profile),
+                        builder: (_) => const EditProfileScreen(),
                       ),
                     ),
                     icon: const Icon(Icons.edit_outlined, size: 18),
@@ -271,7 +227,7 @@ class ProfileScreen extends StatelessWidget {
                         style: OutlinedButton.styleFrom(
                           minimumSize: const Size(0, 44),
                         ),
-                        onPressed: () => _editServer(context, service),
+                        onPressed: () => showServerDialog(context),
                         child: const Text('Change server'),
                       ),
                     ),
@@ -314,10 +270,20 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 _MenuTile(
-                  icon: Icons.restart_alt_rounded,
-                  title: 'Reset app data',
+                  icon: Icons.lock_reset_rounded,
+                  title: 'Change password',
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => const ChangePasswordScreen(),
+                    ),
+                  ),
+                ),
+                _MenuTile(
+                  icon: Icons.logout_rounded,
+                  title: 'Log out',
                   color: AppColors.error,
-                  onTap: () => _reset(context),
+                  onTap: () => _logout(context),
                 ),
               ],
             ),

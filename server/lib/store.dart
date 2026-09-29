@@ -5,11 +5,17 @@ import 'seed.dart';
 
 typedef Doc = Map<String, dynamic>;
 
-/// Tiny JSON-file database: four collections of documents keyed by id.
+/// Tiny JSON-file database: collections of documents keyed by id.
 class Store {
   Store._(this._file, this._data);
 
-  static const collections = ['users', 'reports', 'redemptions', 'cashClaims'];
+  static const collections = [
+    'users',
+    'sessions',
+    'reports',
+    'redemptions',
+    'cashClaims',
+  ];
 
   final File? _file;
   final Map<String, Map<String, Doc>> _data;
@@ -50,6 +56,7 @@ class Store {
   }
 
   Map<String, Doc> get users => _data['users']!;
+  Map<String, Doc> get sessions => _data['sessions']!;
   Map<String, Doc> get reports => _data['reports']!;
   Map<String, Doc> get redemptions => _data['redemptions']!;
   Map<String, Doc> get cashClaims => _data['cashClaims']!;

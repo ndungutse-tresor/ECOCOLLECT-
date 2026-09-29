@@ -5,7 +5,7 @@ import 'package:provider/provider.dart';
 import '../services/ewaste_service.dart';
 import '../utils/constants.dart';
 import '../widgets/app_logo.dart';
-import 'main_shell.dart';
+import 'app_root.dart';
 import 'onboarding_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -33,7 +33,7 @@ class _SplashScreenState extends State<SplashScreen> {
       PageRouteBuilder<void>(
         transitionDuration: const Duration(milliseconds: 500),
         pageBuilder: (_, __, ___) =>
-            service.isOnboarded ? const MainShell() : const OnboardingScreen(),
+            service.isOnboarded ? const AppRoot() : const OnboardingScreen(),
         transitionsBuilder: (_, animation, __, child) =>
             FadeTransition(opacity: animation, child: child),
       ),

@@ -35,6 +35,7 @@ class EwasteService extends ChangeNotifier {
   static const _onboardedKey = 'ecocollect.onboarded';
   static const _serverUrlKey = 'ecocollect.serverUrl';
   static const _pendingDeletesKey = 'ecocollect.pendingDeletes';
+  static const _tokenKey = 'ecocollect.token';
 
   /// [serverUrl] sets the default server (an empty string disables syncing).
   EwasteService({String? serverUrl, http.Client? httpClient})
@@ -56,6 +57,10 @@ class EwasteService extends ChangeNotifier {
   List<String> _pendingDeletes = [];
   UserProfile? _profile;
   bool _onboarded = false;
+  String? _token;
+
+  /// Set when the server ended the session; the login screen explains why.
+  bool sessionExpired = false;
   bool _loaded = false;
   final _random = Random();
 
@@ -66,6 +71,7 @@ class EwasteService extends ChangeNotifier {
   String? _syncError;
   bool _syncing = false;
   bool _syncAgain = false;
+  Completer<void>? _followUp;
 
   Future<void> _load() async {
     try {
@@ -92,6 +98,7 @@ class EwasteService extends ChangeNotifier {
         );
       }
       _onboarded = prefs.getBool(_onboardedKey) ?? false;
+      _token = prefs.getString(_tokenKey);
       _serverUrl = ApiClient.normalizeUrl(
         prefs.getString(_serverUrlKey) ?? _defaultServerUrl,
       );
@@ -119,6 +126,13 @@ class EwasteService extends ChangeNotifier {
       await prefs.setString(_serverUrlKey, _serverUrl);
       if (_profile != null) {
         await prefs.setString(_profileKey, jsonEncode(_profile!.toJson()));
+      } else {
+        await prefs.remove(_profileKey);
+      }
+      if (_token != null) {
+        await prefs.setString(_tokenKey, _token!);
+      } else {
+        await prefs.remove(_tokenKey);
       }
       await prefs.setBool(_onboardedKey, _onboarded);
     } catch (e) {
@@ -139,7 +153,10 @@ class EwasteService extends ChangeNotifier {
   // Read-only state
 
   bool get isLoaded => _loaded;
+
+  /// Whether the intro slides have been shown.
   bool get isOnboarded => _onboarded;
+  bool get isLoggedIn => _token != null && _profile != null;
   UserProfile? get profile => _profile;
 
   List<EwasteItem> get items => List.unmodifiable(_items);
@@ -372,15 +389,114 @@ class EwasteService extends ChangeNotifier {
     return claim;
   }
 
-  Future<void> completeOnboarding(UserProfile profile) async {
-    _profile = profile;
+  Future<void> markIntroSeen() async {
     _onboarded = true;
-    await _changed();
+    notifyListeners();
+    await _save();
   }
 
-  Future<void> updateProfile(UserProfile profile) async {
+  ApiClient _client() {
+    final api = _api ??= ApiClient(_serverUrl, client: _httpClient);
+    api.token = _token;
+    return api;
+  }
+
+  void _requireServer() {
+    if (_serverUrl.isEmpty) {
+      throw ApiException('Set the server address first.');
+    }
+  }
+
+  /// Creates an account on the server and signs in.
+  Future<void> register({
+    required String name,
+    required String phone,
+    required String district,
+    required String password,
+    String email = '',
+  }) async {
+    _requireServer();
+    final (token, profile) = await _client().register(
+      name: name,
+      phone: phone,
+      district: district,
+      password: password,
+      email: email,
+    );
+    await _startSession(token, profile);
+  }
+
+  Future<void> login(String phone, String password) async {
+    _requireServer();
+    final (token, profile) = await _client().login(phone, password);
+    await _startSession(token, profile);
+  }
+
+  Future<void> _startSession(String token, UserProfile profile) async {
+    _clearAccountData();
+    _token = token;
     _profile = profile;
-    await _changed();
+    _onboarded = true;
+    sessionExpired = false;
+    notifyListeners();
+    await _save();
+    // Open the app right away; history and points arrive a moment later.
+    unawaited(sync());
+  }
+
+  /// Signs out and removes this account's data from the device.
+  /// Changes that have not synced yet are lost.
+  Future<void> logout() async {
+    if (_token != null) {
+      try {
+        await _client().logout();
+      } catch (_) {
+        // Signing out locally is enough when the server is unreachable.
+      }
+    }
+    _endSession();
+    notifyListeners();
+    await _save();
+  }
+
+  void _endSession() {
+    _clearAccountData();
+    _token = null;
+    _profile = null;
+    _api?.token = null;
+  }
+
+  void _clearAccountData() {
+    _items = [];
+    _redemptions = [];
+    _claims = [];
+    _pendingDeletes = [];
+    _lastSyncedAt = null;
+    _syncError = null;
+    _syncStatus = _serverUrl.isEmpty ? SyncStatus.off : SyncStatus.idle;
+  }
+
+  /// Saves new account details on the server (needs a connection).
+  Future<void> updateAccount({
+    required String name,
+    required String phone,
+    required String district,
+    String email = '',
+  }) async {
+    _requireServer();
+    _profile = await _client().updateProfile(
+      name: name,
+      phone: phone,
+      district: district,
+      email: email,
+    );
+    notifyListeners();
+    await _save();
+  }
+
+  Future<void> changePassword(String current, String next) {
+    _requireServer();
+    return _client().changePassword(current, next);
   }
 
   Future<void> setServerUrl(String url) async {
@@ -391,66 +507,66 @@ class EwasteService extends ChangeNotifier {
     await _changed();
   }
 
-  /// Clears this device's data. Server records are kept.
-  Future<void> resetAll() async {
-    final serverUrl = _serverUrl;
-    await _prefs?.clear();
-    _items = [];
-    _redemptions = [];
-    _claims = [];
-    _pendingDeletes = [];
-    _profile = null;
-    _onboarded = false;
-    _serverUrl = serverUrl;
-    _lastSyncedAt = null;
-    notifyListeners();
-    await _save();
-  }
-
   // ---------------------------------------------------------------------------
   // Sync
 
   /// Pushes local changes, then pulls the latest statuses from the server.
   Future<void> sync() async {
     final profile = _profile;
-    if (!_loaded || profile == null || _serverUrl.isEmpty) return;
+    if (!_loaded || profile == null || _token == null || _serverUrl.isEmpty) {
+      return;
+    }
     if (_syncing) {
       _syncAgain = true;
-      return;
+      return (_followUp ??= Completer<void>()).future;
     }
     _syncing = true;
     _syncStatus = SyncStatus.syncing;
     notifyListeners();
 
-    final api = _api ??= ApiClient(_serverUrl, client: _httpClient);
+    final api = _client();
+    var expired = false;
     try {
-      await api.upsertUser(profile);
-      await _pushDeletes(api, profile.id);
-      await _pushItems(api, profile.id);
-      await _pushRedemptions(api, profile.id);
-      await _pushClaims(api, profile.id);
-      applyServerState(await api.fetchUserState(profile.id));
+      await _pushDeletes(api);
+      await _pushItems(api);
+      await _pushRedemptions(api);
+      await _pushClaims(api);
+      final state = await api.fetchMyState();
+      final user = state['user'];
+      if (user is Map<String, dynamic>) _profile = UserProfile.fromJson(user);
+      applyServerState(state);
       _syncStatus = SyncStatus.synced;
       _lastSyncedAt = DateTime.now();
       _syncError = null;
+    } on ApiException catch (e) {
+      expired = e.statusCode == 401;
+      _syncStatus = SyncStatus.offline;
+      _syncError = e.message;
     } catch (e) {
       _syncStatus = SyncStatus.offline;
       _syncError = e.toString();
     }
 
     _syncing = false;
+    if (expired) {
+      _endSession();
+      sessionExpired = true;
+    }
     notifyListeners();
     await _save();
     if (_syncAgain) {
       _syncAgain = false;
-      unawaited(sync());
+      final followUp = _followUp;
+      _followUp = null;
+      await sync();
+      followUp?.complete();
     }
   }
 
-  Future<void> _pushDeletes(ApiClient api, String userId) async {
+  Future<void> _pushDeletes(ApiClient api) async {
     for (final id in [..._pendingDeletes]) {
       try {
-        await api.deleteReport(userId, id);
+        await api.deleteReport(id);
       } on ApiException catch (e) {
         if (!e.isRejection) rethrow;
       }
@@ -458,7 +574,7 @@ class EwasteService extends ChangeNotifier {
     }
   }
 
-  Future<void> _pushItems(ApiClient api, String userId) async {
+  Future<void> _pushItems(ApiClient api) async {
     for (final item in _items.where((i) => !i.synced).toList()) {
       String? photo;
       if (item.photoPath != null && item.photoUrl == null) {
@@ -466,7 +582,7 @@ class EwasteService extends ChangeNotifier {
       }
       EwasteItem updated;
       try {
-        final saved = await api.upsertReport(userId, item, photoBase64: photo);
+        final saved = await api.upsertReport(item, photoBase64: photo);
         updated = EwasteItem.fromJson(saved)
             .copyWith(photoPath: item.photoPath, synced: true);
       } on ApiException catch (e) {
@@ -481,10 +597,10 @@ class EwasteService extends ChangeNotifier {
     }
   }
 
-  Future<void> _pushRedemptions(ApiClient api, String userId) async {
+  Future<void> _pushRedemptions(ApiClient api) async {
     for (final redemption in _redemptions.where((r) => !r.synced).toList()) {
       try {
-        await api.createRedemption(userId, redemption);
+        await api.createRedemption(redemption);
       } on ApiException catch (e) {
         if (!e.isRejection) rethrow;
       }
@@ -493,11 +609,11 @@ class EwasteService extends ChangeNotifier {
     }
   }
 
-  Future<void> _pushClaims(ApiClient api, String userId) async {
+  Future<void> _pushClaims(ApiClient api) async {
     for (final claim in _claims.where((c) => !c.synced).toList()) {
       CashClaim updated;
       try {
-        await api.createCashClaim(userId, claim);
+        await api.createCashClaim(claim);
         updated = claim.copyWith(synced: true);
       } on ApiException catch (e) {
         if (!e.isRejection) rethrow;

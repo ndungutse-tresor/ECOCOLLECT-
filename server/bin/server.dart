@@ -28,7 +28,8 @@ Future<void> main() async {
     appWebDir: p.join(projectDir, 'build', 'web'),
   );
 
-  final server = await io.serve(handler, InternetAddress.anyIPv4, port);
+  // Listen on IPv6 and IPv4 so "localhost" resolves without a slow fallback.
+  final server = await io.serve(handler, InternetAddress.anyIPv6, port);
   final lanIps = <String>[];
   for (final nic
       in await NetworkInterface.list(type: InternetAddressType.IPv4)) {

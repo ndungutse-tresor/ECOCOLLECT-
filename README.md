@@ -13,7 +13,7 @@ The project has three parts:
 ## Features
 
 **Member app**
-- Onboarding and profile (name, phone, district).
+- Member accounts: create an account (name, phone, optional email, district, password) and log in with phone number and password. After logging in, members can edit their details, change their password and log out. Logging in on a new phone brings back their reports, points, vouchers and cash claims.
 - Report e-waste in four steps: category, details and photo, drop-off or pickup, review.
 - Drop-off map with search, filters, "Open now", distance and Google Maps directions.
 - Home pickup booking with address (can use current location), phone, day and time slot.
@@ -21,14 +21,14 @@ The project has three parts:
 - EcoPoints (10 per kg + 5 per item), levels, and rewards with voucher codes.
 - **Cash rewards**: Mobile Money payouts at 10 kg (RWF 1,000), 25 kg (RWF 3,000), 50 kg (RWF 7,000) and 100 kg (RWF 15,000) of verified recycling, paid to MTN MoMo or Airtel Money.
 - Impact dashboard with CO₂ avoided, weight by category and monthly activity.
-- Works offline; changes sync automatically when the server is reachable.
+- Works offline once logged in; changes sync automatically when the server is reachable. Creating an account and logging in need a connection.
 
 **Admin dashboard**
 - Overview: verified weight, reports to verify, pickups, payouts due, members, charts by district and category.
 - Reports: verify, reject (with a reason shown to the member), mark recycled; members who say they handed over are listed first.
 - Pickups: home collections grouped by day, with address and phone.
 - Payouts: approve cash reward claims, check eligibility, record the Mobile Money transaction ID.
-- Members: ranked by verified recycling, with points and cash paid.
+- Members: ranked by verified recycling, with contact details, last login, points and cash paid.
 
 Points and cash rewards are only credited after the admin verifies a hand-over.
 
@@ -52,7 +52,7 @@ It prints the addresses to use, including your computer's network address for ph
 | `ADMIN_PIN` | `admin123` | PIN for the admin dashboard. **Change it** outside local testing. |
 | `DATA_DIR` | `server/data` | Where `db.json` and report photos are stored |
 
-A new database starts with a few sample members and reports so the dashboard has content. Delete `server/data` to start fresh.
+A new database starts with a few sample members and reports so the dashboard has content. The sample members can log in with their phone number (0788000101 to 0788000104) and the password `demo1234`. Delete `server/data` to start fresh.
 
 ### 2. Open the admin dashboard
 
@@ -109,6 +109,7 @@ test/                  App tests
 ## Notes
 
 - Plain HTTP is allowed for local testing (Android cleartext, iOS local networking). Put the server behind HTTPS before real use.
+- Member passwords are stored as salted PBKDF2-SHA256 hashes, and sessions as hashed tokens. Changing a password signs out the member's other devices.
 - The admin PIN is a single shared secret, suitable for a pilot. Add proper staff accounts before scaling up.
 - Drop-off locations, community statistics and the reward catalogue are sample data.
 - Map tiles © OpenStreetMap contributors.

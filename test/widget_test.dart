@@ -3,13 +3,15 @@ import 'package:ecocollect_rwanda/models/cash_reward.dart';
 import 'package:ecocollect_rwanda/models/dropoff_point.dart';
 import 'package:ecocollect_rwanda/models/ewaste_item.dart';
 import 'package:ecocollect_rwanda/models/reward.dart';
-import 'package:ecocollect_rwanda/models/user_profile.dart';
+import 'package:ecocollect_rwanda/services/api_client.dart';
 import 'package:ecocollect_rwanda/services/ewaste_service.dart';
 import 'package:ecocollect_rwanda/utils/format.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'fake_server.dart';
 
 EwasteItem _newItem({String id = 'test1', double kg = 0.6, int qty = 3}) =>
     EwasteItem(
@@ -153,20 +155,112 @@ void main() {
       expect(service.latestClaimFor(ten)!.reference, 'TX1');
     });
 
-    test('persists data between app launches', () async {
+    test('persists reports between app launches', () async {
       final first = await _service();
-      await first.completeOnboarding(UserProfile(
-        id: 'u1',
-        name: 'Aline',
-        phone: '',
-        district: 'Gasabo',
-        memberSince: DateTime.now(),
-      ));
       await first.addItem(_newItem(id: 'persisted'));
 
       final second = await _service();
       expect(second.getItemById('persisted'), isNotNull);
-      expect(second.profile!.id, 'u1');
+    });
+  });
+
+  group('accounts', () {
+    late FakeServer server;
+
+    Future<EwasteService> connected() async {
+      final service = EwasteService(
+        serverUrl: 'http://test.local',
+        httpClient: server.client,
+      );
+      await service.ready;
+      return service;
+    }
+
+    Future<EwasteService> registered() async {
+      final service = await connected();
+      await service.register(
+        name: 'Aline Uwase',
+        phone: '0788123456',
+        district: 'Gasabo',
+        password: 'secret123',
+      );
+      return service;
+    }
+
+    setUp(() => server = FakeServer());
+
+    test('a new install is signed out', () async {
+      final service = await connected();
+      expect(service.isLoggedIn, isFalse);
+    });
+
+    test('creating an account signs in and survives a restart', () async {
+      final service = await registered();
+      await service.sync();
+      expect(service.isLoggedIn, isTrue);
+      expect(service.profile!.name, 'Aline Uwase');
+      expect(service.syncStatus, SyncStatus.synced);
+
+      final restarted = await connected();
+      expect(restarted.isLoggedIn, isTrue);
+      expect(restarted.profile!.id, service.profile!.id);
+    });
+
+    test('login rejects a wrong password with a clear message', () async {
+      await (await registered()).logout();
+      final service = await connected();
+      await expectLater(
+        service.login('0788123456', 'wrong'),
+        throwsA(isA<ApiException>().having(
+          (e) => e.message,
+          'message',
+          'Wrong phone number or password',
+        )),
+      );
+      await service.login('0788123456', 'secret123');
+      expect(service.isLoggedIn, isTrue);
+    });
+
+    test('reports sync to the account and come back after logging in again',
+        () async {
+      final service = await registered();
+      await service.addItem(_newItem(id: 'mine'));
+      await service.sync();
+      expect(server.reports, contains('mine'));
+
+      await service.logout();
+      expect(service.items, isEmpty);
+      expect(service.isLoggedIn, isFalse);
+
+      await service.login('0788123456', 'secret123');
+      await service.sync();
+      expect(service.getItemById('mine'), isNotNull);
+    });
+
+    test('members can update their details after logging in', () async {
+      final service = await registered();
+      await service.updateAccount(
+        name: 'Aline U.',
+        phone: '0788123456',
+        district: 'Kicukiro',
+        email: 'aline@example.com',
+      );
+      expect(service.profile!.district, 'Kicukiro');
+      expect(service.profile!.email, 'aline@example.com');
+
+      await expectLater(
+        service.changePassword('wrong', 'newpass1'),
+        throwsA(isA<ApiException>()),
+      );
+      await service.changePassword('secret123', 'newpass1');
+    });
+
+    test('an expired session signs the member out', () async {
+      final service = await registered();
+      server.expireSessions = true;
+      await service.sync();
+      expect(service.isLoggedIn, isFalse);
+      expect(service.sessionExpired, isTrue);
     });
   });
 
@@ -206,30 +300,44 @@ void main() {
     });
   });
 
-  testWidgets('first launch walks through onboarding into the app',
+  testWidgets('first launch: intro, create an account, then home',
       (tester) async {
-    await tester
-        .pumpWidget(EcoCollectApp(service: EwasteService(serverUrl: '')));
+    final server = FakeServer();
+    await tester.pumpWidget(EcoCollectApp(
+      service: EwasteService(
+        serverUrl: 'http://test.local',
+        httpClient: server.client,
+      ),
+    ));
     await tester.pump(const Duration(seconds: 2));
     await tester.pump(const Duration(seconds: 1));
-
     expect(find.text('Report your e-waste'), findsOneWidget);
 
     await tester.tap(find.text('Skip'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Welcome! Let’s set you up'), findsOneWidget);
+    expect(find.text('Welcome back'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextFormField).first, 'Aline Uwase');
-    await tester.ensureVisible(find.text('Start recycling'));
+    await tester.ensureVisible(find.text('Create an account'));
+    await tester.tap(find.text('Create an account'));
     await tester.pump();
-    await tester.tap(find.text('Start recycling'));
+    await tester.pump(const Duration(seconds: 1));
+    expect(find.text('Create your account'), findsOneWidget);
+
+    final fields = find.byType(TextFormField);
+    await tester.enterText(fields.at(0), 'Aline Uwase');
+    await tester.enterText(fields.at(1), '0788123456');
+    await tester.enterText(fields.at(3), 'secret123');
+    await tester.enterText(fields.at(4), 'secret123');
+    await tester.ensureVisible(find.text('Create account'));
+    await tester.pump();
+    await tester.tap(find.text('Create account'));
     await tester.pump();
     await tester.pump(const Duration(seconds: 1));
     await tester.pump(const Duration(seconds: 1));
 
+    expect(server.users, contains('0788123456'));
     expect(find.text('Aline'), findsOneWidget);
     expect(find.text('Quick actions'), findsOneWidget);
-    expect(find.text('0 kg'), findsNWidgets(2));
   });
 }

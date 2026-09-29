@@ -1,7 +1,12 @@
+import 'auth.dart';
 import 'store.dart';
 
+/// Password for the sample members, for demos.
+const samplePassword = 'demo1234';
+
 /// Sample members and reports so a fresh server has a populated dashboard.
-void seedSampleData(Store store) {
+void seedSampleData(Store store, {Auth? auth}) {
+  final passwordHash = (auth ?? Auth()).hashPassword(samplePassword);
   final now = DateTime.now();
   String ago(int days, [int hours = 0]) =>
       now.subtract(Duration(days: days, hours: hours)).toIso8601String();
@@ -20,6 +25,8 @@ void seedSampleData(Store store) {
       'name': name,
       'phone': phone,
       'district': district,
+      'email': '',
+      'passwordHash': passwordHash,
       'memberSince': ago(days),
       'updatedAt': ago(0),
     };
